@@ -13,12 +13,15 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 
 @RestController
@@ -267,7 +270,11 @@ public class TramiteController {
             } else {
                 tramite.setEstado(EstadoTramite.RECHAZADO);
                 tramite.setFechaVerificacion(null);
+                if (tramite.getCodigoVerificacion() == null || tramite.getCodigoVerificacion().isBlank()) {
+                    tramite.setCodigoVerificacion(generarCodigoVerificacion(tramite.getNumeroRadicado()));
+                }
                 documentoGeneradoService.generarYAdjuntarPdf(tramite, false, verificacion.getObservaciones());
+                tramite.setHashDocumentoGenerado(calcularHashSha256(tramite.getContenidoPdfGenerado()));
                 emailService.enviarDocumentoFinal(
                         tramite.getCorreoElectronico(),
                         tramite.getNombreSolicitante(),
@@ -355,7 +362,11 @@ public class TramiteController {
             tramite.setFirmaAlcalde("FIRMADO_POR_" + usernameFirma.toUpperCase());
             tramite.setFechaFirmaAlcalde(LocalDateTime.now());
                 tramite.setUsuarioAlcalde(usuarioAlcalde);
+            if (tramite.getCodigoVerificacion() == null || tramite.getCodigoVerificacion().isBlank()) {
+                tramite.setCodigoVerificacion(generarCodigoVerificacion(tramite.getNumeroRadicado()));
+            }
             documentoGeneradoService.generarYAdjuntarPdf(tramite, true, "");
+            tramite.setHashDocumentoGenerado(calcularHashSha256(tramite.getContenidoPdfGenerado()));
             
             Tramite actualizado = tramiteRepository.save(tramite);
             
@@ -381,19 +392,32 @@ public class TramiteController {
     @GetMapping("/verificacion/{numeroRadicado}")
     public ResponseEntity<?> verificarCertificado(@PathVariable String numeroRadicado) {
         try {
-            Optional<Tramite> tramite = tramiteRepository.findAll().stream()
-                    .filter(t -> t.getNumeroRadicado().equals(numeroRadicado))
-                    .findFirst();
+            String criterio = numeroRadicado == null ? "" : numeroRadicado.trim();
+            if (criterio.isBlank()) {
+                return ResponseEntity.badRequest().body("Radicado o código de verificación requerido");
+            }
+
+            Optional<Tramite> tramite = tramiteRepository.findByNumeroRadicadoIgnoreCase(criterio);
+            if (tramite.isEmpty()) {
+                tramite = tramiteRepository.findByCodigoVerificacionIgnoreCase(criterio);
+            }
             
             if (tramite.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body("Radicado no encontrado");
+                        .body("Radicado o código de verificación no encontrado");
             }
             
             Tramite t = tramite.get();
+            String hashActual = calcularHashSha256(t.getContenidoPdfGenerado());
+            boolean documentoIntegro = t.getContenidoPdfGenerado() != null
+                    && t.getContenidoPdfGenerado().length > 0
+                    && t.getHashDocumentoGenerado() != null
+                    && !t.getHashDocumentoGenerado().isBlank()
+                    && Objects.equals(t.getHashDocumentoGenerado(), hashActual);
             
             var respuesta = new java.util.HashMap<String, Object>();
             respuesta.put("numeroRadicado", t.getNumeroRadicado());
+            respuesta.put("codigoVerificacion", t.getCodigoVerificacion());
             respuesta.put("estado", t.getEstado().toString());
             respuesta.put("nombreSolicitante", t.getNombreSolicitante());
             respuesta.put("numeroDocumento", t.getNumeroDocumento());
@@ -401,6 +425,9 @@ public class TramiteController {
             respuesta.put("direccionResidencia", t.getDireccionResidencia());
             respuesta.put("barrioResidencia", t.getBarrioResidencia());
             respuesta.put("fechaRadicacion", t.getFechaRadicacion());
+            respuesta.put("documentoIntegro", documentoIntegro);
+            respuesta.put("hashRegistrado", t.getHashDocumentoGenerado());
+            respuesta.put("hashActual", hashActual);
             
             // VIGENCIA DEL CERTIFICADO: Solo disponible si está FINALIZADO (firmado por alcalde)
             if (t.getEstado() == EstadoTramite.FINALIZADO) {
@@ -613,6 +640,31 @@ public class TramiteController {
 
     private String valor(String valor) {
         return valor == null ? "" : valor;
+    }
+
+    private String generarCodigoVerificacion(String numeroRadicado) {
+        String base = (numeroRadicado == null ? "TRAM" : numeroRadicado.replaceAll("[^A-Za-z0-9]", "").toUpperCase());
+        String sufijo = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyMMddHHmmss"));
+        String prefijo = base.length() <= 8 ? base : base.substring(base.length() - 8);
+        return prefijo + "-" + sufijo;
+    }
+
+    private String calcularHashSha256(byte[] contenido) {
+        if (contenido == null || contenido.length == 0) {
+            return null;
+        }
+
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(contenido);
+            StringBuilder builder = new StringBuilder();
+            for (byte b : hash) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("No se pudo calcular hash SHA-256", e);
+        }
     }
 
     private String generarRadicado() {

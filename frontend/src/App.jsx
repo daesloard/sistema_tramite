@@ -26,7 +26,30 @@ const styles = {
     padding: 'clamp(1.5rem, 5vw, 3rem) clamp(1rem, 4vw, 2rem)',
     textAlign: 'center',
   },
-  headerTitle: { fontSize: 'clamp(1.6rem, 6vw, 2.5rem)', marginBottom: '0.5rem', fontWeight: 700 },
+  headerMarcaInicio: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.85rem',
+  },
+  headerTextoInicio: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    textAlign: 'left',
+    gap: '0.2rem',
+  },
+  headerEscudoInicio: {
+    width: 'clamp(200px, 30vw, 250px)',
+    height: 'auto',
+    filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.25))',
+  },
+  headerEscudoPanel: {
+    width: 'clamp(110px, 24vw, 250px)',
+    height: 'auto',
+    filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.25))',
+  },
+  headerTitle: { fontSize: 'clamp(1.6rem, 6vw, 2.5rem)', margin: 0, fontWeight: 700 },
   headerSubtitle: { fontSize: 'clamp(0.95rem, 3.2vw, 1.1rem)', opacity: 0.9, margin: 0 },
   inicioContenedor: { flex: 1, padding: 'clamp(1rem, 4vw, 3rem) clamp(0.9rem, 4vw, 2rem)', maxWidth: '1200px', margin: '0 auto', width: '100%' },
   intro: { textAlign: 'center', color: '#fff', marginBottom: '3rem' },
@@ -60,12 +83,14 @@ const styles = {
     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     color: '#fff',
     padding: 'clamp(0.9rem, 3.5vw, 1.5rem) clamp(0.9rem, 4vw, 2rem)',
-    display: 'flex',
+    display: 'grid',
+    gridTemplateColumns: 'auto 1fr auto',
     alignItems: 'center',
-    gap: '1rem',
-    flexWrap: 'wrap',
+    gap: '0.9rem',
   },
-  headerTitleCommon: { flex: 1, margin: 0, fontSize: 'clamp(1rem, 4.5vw, 1.5rem)' },
+  headerCentro: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.7rem', minWidth: 0 },
+  headerTitleCommon: { margin: 0, fontSize: 'clamp(1rem, 4.5vw, 1.5rem)', textAlign: 'center' },
+  headerDerecha: { justifySelf: 'end' },
   btnVolver: {
     padding: '0.45rem 0.9rem',
     background: 'rgba(255,255,255,0.2)',
@@ -157,11 +182,40 @@ const getEstadoBadgeStyle = (estado) => {
 };
 
 function HeaderConVolver({ onVolver, titulo, derecha }) {
+  const [esMovil, setEsMovil] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 768;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setEsMovil(window.innerWidth <= 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const headerStyle = esMovil
+    ? { ...styles.headerComun, gridTemplateColumns: '1fr', justifyItems: 'center', rowGap: '0.65rem' }
+    : styles.headerComun;
+
+  const headerCentroStyle = esMovil
+    ? { ...styles.headerCentro, flexDirection: 'column', gap: '0.4rem' }
+    : styles.headerCentro;
+
+  const headerDerechaStyle = esMovil
+    ? { ...styles.headerDerecha, justifySelf: 'center' }
+    : styles.headerDerecha;
+
   return (
-    <header style={styles.headerComun}>
+    <header style={headerStyle}>
       <button style={styles.btnVolver} onClick={onVolver}>← Volver al Inicio</button>
-      {titulo ? <h1 style={styles.headerTitleCommon}>{titulo}</h1> : null}
-      {derecha || null}
+      <div style={headerCentroStyle}>
+        <img src="/escudo.png" alt="Escudo del municipio" style={styles.headerEscudoPanel} />
+        {titulo ? <h1 style={styles.headerTitleCommon}>{titulo}</h1> : null}
+      </div>
+      <div style={headerDerechaStyle}>{derecha || null}</div>
     </header>
   );
 }
@@ -182,14 +236,14 @@ export default function App() {
   const [tramites, setTramites] = useState([]);
   const [loading, setLoading] = useState(false);
   const [usuariosOperativos, setUsuariosOperativos] = useState([]);
-  const [usuariosExpandido, setUsuariosExpandido] = useState(true);
+  const [usuariosExpandido, setUsuariosExpandido] = useState(false);
   const [loadingUsuarios, setLoadingUsuarios] = useState(false);
   const [guardandoUsuarioId, setGuardandoUsuarioId] = useState(null);
   const [tramiteExpandidoId, setTramiteExpandidoId] = useState(null);
   const [filtroCertRadicado, setFiltroCertRadicado] = useState('');
   const [filtroCertNombre, setFiltroCertNombre] = useState('');
   const [filtroCertTipo, setFiltroCertTipo] = useState('todos');
-  const [certificadosExpandido, setCertificadosExpandido] = useState(true);
+  const [certificadosExpandido, setCertificadosExpandido] = useState(false);
   const [usuarioActual, setUsuarioActual] = useState(null);
   const [vistaLoginDestino, setVistaLoginDestino] = useState(null);
 
@@ -353,8 +407,13 @@ export default function App() {
     return (
       <div style={styles.appInicio}>
         <header style={styles.headerInicio}>
-          <h1 style={styles.headerTitle}>Ventanilla Virtual</h1>
-          <p style={styles.headerSubtitle}>Sistema Municipal de Trámites</p>
+          <div style={styles.headerMarcaInicio}>
+            <img src="/escudo.png" alt="Escudo del municipio" style={styles.headerEscudoInicio} />
+            <div style={styles.headerTextoInicio}>
+              <h1 style={styles.headerTitle}>Ventanilla Virtual</h1>
+              <p style={styles.headerSubtitle}>Sistema Municipal de Trámites</p>
+            </div>
+          </div>
         </header>
 
         <main style={styles.inicioContenedor}>
@@ -381,7 +440,7 @@ export default function App() {
         </main>
 
         <footer style={styles.footerInicio}>
-          <p>&copy; 2026 Municipalidad. Todos los derechos reservados.</p>
+          <p>&copy; 2026 Municipio de Cabuyaro (Meta). Todos los derechos reservados.</p>
         </footer>
       </div>
     );
@@ -399,9 +458,7 @@ export default function App() {
   if (vista === 'verificar') {
     return (
       <div style={styles.appVerificar}>
-        <header style={styles.headerComun}>
-          <button style={styles.btnVolver} onClick={() => setVista('inicio')}>← Volver al Inicio</button>
-        </header>
+        <HeaderConVolver onVolver={() => setVista('inicio')} />
         <VerificadorCertificado />
       </div>
     );

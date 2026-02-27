@@ -219,7 +219,7 @@ export default function VerificadorCertificado() {
 
   const handleBuscar = async () => {
     if (!numeroRadicado.trim()) {
-      setError('Por favor ingresa un número de radicado');
+      setError('Por favor ingresa un número de radicado o código de verificación');
       return;
     }
 
@@ -279,7 +279,7 @@ export default function VerificadorCertificado() {
       <div style={styles.caja}>
         <div style={styles.encabezado}>
           <h2 style={styles.titulo}>🔍 Verificar Certificado de Residencia</h2>
-          <p style={styles.subtitulo}>Ingresa tu número de radicado para consultar el estado de tu solicitud</p>
+          <p style={styles.subtitulo}>Ingresa tu número de radicado o código de verificación para consultar el estado de tu solicitud</p>
         </div>
 
         {!buscado ? (
@@ -287,7 +287,7 @@ export default function VerificadorCertificado() {
             <div style={styles.entradaRadicado}>
               <input
                 type="text"
-                placeholder="Ejemplo: RES-20260225112346"
+                placeholder="Ejemplo: RES-20260225112346 o 25112346-260225112346"
                 value={numeroRadicado}
                 onChange={(e) => setNumeroRadicado(e.target.value.toUpperCase())}
                 onKeyPress={handleKeyPress}
@@ -309,6 +309,7 @@ export default function VerificadorCertificado() {
               <h3 style={styles.instruccionesTitulo}>¿Cómo usar este servicio?</h3>
               <ul style={styles.instruccionesLista}>
                 <li style={styles.instruccionesItem}>Ingresa el número de radicado que recibiste por correo</li>
+                <li style={styles.instruccionesItem}>También puedes usar el código único de verificación del certificado</li>
                 <li style={styles.instruccionesItem}>Podrás ver el estado actual de tu solicitud</li>
                 <li style={styles.instruccionesItem}>Verifica si tu certificado aún está vigente (6 meses)</li>
                 <li style={styles.instruccionesItem}>El sistema actualizará cada que tu solicitud cambie de estado</li>
@@ -365,6 +366,11 @@ export default function VerificadorCertificado() {
                 </div>
 
                 <div style={styles.detalle}>
+                  <span style={styles.etiquetaDetalle}>Código de Verificación</span>
+                  <span style={styles.valorDetalle}>{resultado.codigoVerificacion || 'No asignado'}</span>
+                </div>
+
+                <div style={styles.detalle}>
                   <span style={styles.etiquetaDetalle}>Lugar de Expedición</span>
                   <span style={styles.valorDetalle}>{resultado.lugarExpedicionDocumento || 'No registrado'}</span>
                 </div>
@@ -381,6 +387,18 @@ export default function VerificadorCertificado() {
                   </span>
                 </div>
               </div>
+
+              {resultado.documentoIntegro === true && (
+                <div style={{ ...styles.alertaBase, ...styles.alertaVigente }}>
+                  <p>✓ Integridad validada: el documento coincide con el hash registrado en el sistema.</p>
+                </div>
+              )}
+
+              {resultado.documentoIntegro === false && (
+                <div style={{ ...styles.alertaBase, ...styles.alertaVencido }}>
+                  <p>⚠️ Integridad no válida: el documento no coincide con el hash registrado.</p>
+                </div>
+              )}
 
               {/* MOSTRAR VIGENCIA SOLO SI EL CERTIFICADO FUE EMITIDO (FINALIZADO) */}
               {resultado.certificadoEmitido ? (

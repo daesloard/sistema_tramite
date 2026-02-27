@@ -167,6 +167,12 @@ public class Tramite {
     @Column
     private String tipoContenidoPdfGenerado;
 
+    @Column(unique = true)
+    private String codigoVerificacion;
+
+    @Column(length = 128)
+    private String hashDocumentoGenerado;
+
     public Long getId() {
         return id;
     }
@@ -546,5 +552,21 @@ public class Tramite {
 
     public void setTipoContenidoPdfGenerado(String tipoContenidoPdfGenerado) {
         this.tipoContenidoPdfGenerado = tipoContenidoPdfGenerado;
+    }
+
+    public String getCodigoVerificacion() {
+        return codigoVerificacion;
+    }
+
+    public void setCodigoVerificacion(String codigoVerificacion) {
+        this.codigoVerificacion = codigoVerificacion;
+    }
+
+    public String getHashDocumentoGenerado() {
+        return hashDocumentoGenerado;
+    }
+
+    public void setHashDocumentoGenerado(String hashDocumentoGenerado) {
+        this.hashDocumentoGenerado = hashDocumentoGenerado;
     }
 }

@@ -190,7 +190,7 @@ export default function PanelAlcalde() {
   const [filtroCertRadicado, setFiltroCertRadicado] = useState('');
   const [filtroCertNombre, setFiltroCertNombre] = useState('');
   const [filtroCertTipo, setFiltroCertTipo] = useState('todos');
-  const [certificadosExpandido, setCertificadosExpandido] = useState(true);
+  const [certificadosExpandido, setCertificadosExpandido] = useState(false);
 
   useEffect(() => {
     cargarSolicitudes();
