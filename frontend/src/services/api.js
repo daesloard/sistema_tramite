@@ -44,7 +44,8 @@ export async function radicarCertificadoResidencia(solicitud) {
 
 // Verificar certificado
 export async function verificarCertificado(numeroRadicado) {
-  const response = await fetch(`${API_URL}/verificacion/${numeroRadicado}`);
+  const criterio = encodeURIComponent((numeroRadicado || '').trim());
+  const response = await fetch(`${API_URL}/verificacion/${criterio}`);
   if (!response.ok) {
     const error = await response.text();
     throw new Error(error || 'No se pudo verificar el certificado');

@@ -32,18 +32,40 @@ import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.cert.X509CertificateHolder;
+import org.bouncycastle.cert.X509v3CertificateBuilder;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigInteger;
+import java.nio.file.Paths;
+import java.security.GeneralSecurityException;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.KeyStore;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.Security;
+import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
 import java.text.Normalizer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -65,18 +87,37 @@ public class DocumentoGeneradoService {
 
     private final ResourceLoader resourceLoader;
     private final boolean usarLibreOffice;
+    private final boolean firmaDigitalHabilitada;
+    private final String certificadoP12Path;
+    private final String certificadoP12Password;
+    private final String certificadoP12Alias;
+
+    static {
+        if (Security.getProvider("BC") == null) {
+            Security.addProvider(new BouncyCastleProvider());
+        }
+    }
 
     public DocumentoGeneradoService(ResourceLoader resourceLoader,
-                                    @Value("${app.pdf.use-libreoffice:false}") boolean usarLibreOffice) {
+                                    @Value("${app.pdf.use-libreoffice:false}") boolean usarLibreOffice,
+                                    @Value("${app.pdf.digital-sign.enabled:true}") boolean firmaDigitalHabilitada,
+                                    @Value("${app.pdf.digital-sign.p12-path:}") String certificadoP12Path,
+                                    @Value("${app.pdf.digital-sign.p12-password:}") String certificadoP12Password,
+                                    @Value("${app.pdf.digital-sign.p12-alias:}") String certificadoP12Alias) {
         this.resourceLoader = resourceLoader;
         this.usarLibreOffice = usarLibreOffice;
+        this.firmaDigitalHabilitada = firmaDigitalHabilitada;
+        this.certificadoP12Path = certificadoP12Path;
+        this.certificadoP12Password = certificadoP12Password;
+        this.certificadoP12Alias = certificadoP12Alias;
     }
 
     public void generarYAdjuntarPdf(Tramite tramite, boolean aprobado, String observacion) {
         byte[] pdfBytes = generarPdfDocumento(tramite, aprobado, observacion);
         byte[] pdfProtegido = protegerPdfContraEdicionYCopia(pdfBytes, tramite);
+        byte[] pdfFirmado = firmarPdfDigitalmente(pdfProtegido, tramite);
 
-        tramite.setContenidoPdfGenerado(pdfProtegido);
+        tramite.setContenidoPdfGenerado(pdfFirmado);
         tramite.setNombrePdfGenerado(generarNombrePdf(tramite, aprobado));
         tramite.setTipoContenidoPdfGenerado("application/pdf");
     }
@@ -323,6 +364,9 @@ public class DocumentoGeneradoService {
         resultado = reemplazarRegex(resultado, "«\\s*observacion\\s*»", valor(observacion));
         resultado = reemplazarRegex(resultado, "«\\s*consecutivo\\s*»|«\\s*consecutivo_verificador\\s*»", valor(tramite.getConsecutivoVerificador()));
         resultado = reemplazarRegex(resultado, "«\\s*numeroRadicado\\s*»|«\\s*numeroRadico\\s*»|«\\s*numero_radicado\\s*»|«\\s*radicado\\s*»", valor(tramite.getNumeroRadicado()));
+        resultado = reemplazarRegex(resultado, "«\\s*codigo_verificacion\\s*»|«\\s*codigoVerificacion\\s*»", valor(tramite.getCodigoVerificacion()));
+        resultado = reemplazarRegex(resultado, "«\\s*hash_documento\\s*»|«\\s*hashDocumento\\s*»|«\\s*hash_firma\\s*»", generarHashVisibleFirma(tramite));
+        resultado = reemplazarRegex(resultado, "«\\s*leyenda_firma_digital\\s*»|«\\s*firma_digital_leyenda\\s*»", generarLeyendaFirmaDigital(tramite));
 
         return resultado;
     }
@@ -392,6 +436,134 @@ public class DocumentoGeneradoService {
         }
     }
 
+    private byte[] firmarPdfDigitalmente(byte[] pdfOriginal, Tramite tramite) {
+        if (!firmaDigitalHabilitada || pdfOriginal == null || pdfOriginal.length == 0) {
+            return pdfOriginal;
+        }
+
+        try {
+            CertBundle certBundle = cargarCertificadoFirmante();
+
+                com.itextpdf.text.pdf.PdfReader reader = new com.itextpdf.text.pdf.PdfReader(pdfOriginal);
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                com.itextpdf.text.pdf.PdfStamper stamper = com.itextpdf.text.pdf.PdfStamper.createSignature(reader, outputStream, '\0', null, true);
+
+                com.itextpdf.text.pdf.PdfSignatureAppearance appearance = stamper.getSignatureAppearance();
+            appearance.setReason("Certificado de residencia firmado digitalmente");
+            appearance.setLocation("Cabuyaro, Meta");
+                appearance.setCertificationLevel(com.itextpdf.text.pdf.PdfSignatureAppearance.CERTIFIED_NO_CHANGES_ALLOWED);
+            appearance.setSignDate(java.util.Calendar.getInstance());
+
+                com.itextpdf.text.pdf.security.ExternalDigest digest = new com.itextpdf.text.pdf.security.BouncyCastleDigest();
+                com.itextpdf.text.pdf.security.ExternalSignature signature =
+                    new com.itextpdf.text.pdf.security.PrivateKeySignature(certBundle.privateKey(), com.itextpdf.text.pdf.security.DigestAlgorithms.SHA256, "BC");
+
+                com.itextpdf.text.pdf.security.MakeSignature.signDetached(
+                    appearance,
+                    digest,
+                    signature,
+                    certBundle.chain(),
+                    null,
+                    null,
+                    null,
+                    0,
+                    com.itextpdf.text.pdf.security.MakeSignature.CryptoStandard.CMS
+            );
+
+            reader.close();
+            return outputStream.toByteArray();
+        } catch (Exception ex) {
+            logger.warn("No fue posible aplicar firma digital criptográfica al PDF: {}", ex.getMessage());
+            return pdfOriginal;
+        }
+    }
+
+    private CertBundle cargarCertificadoFirmante() throws Exception {
+        if (certificadoP12Path != null && !certificadoP12Path.isBlank()) {
+            Path path = Paths.get(certificadoP12Path.trim());
+            if (Files.exists(path)) {
+                return cargarDesdePkcs12(path);
+            }
+            logger.warn("Ruta de certificado .p12 no encontrada: {}. Se usará certificado autofirmado temporal.", path);
+        }
+
+        return generarCertificadoAutofirmadoTemporal();
+    }
+
+    private CertBundle cargarDesdePkcs12(Path path) throws Exception {
+        KeyStore keyStore = KeyStore.getInstance("PKCS12");
+        char[] password = certificadoP12Password != null ? certificadoP12Password.toCharArray() : new char[0];
+
+        try (InputStream input = Files.newInputStream(path)) {
+            keyStore.load(input, password);
+        }
+
+        String alias = (certificadoP12Alias != null && !certificadoP12Alias.isBlank())
+                ? certificadoP12Alias.trim()
+                : null;
+
+        if (alias == null || !keyStore.isKeyEntry(alias)) {
+            var aliases = keyStore.aliases();
+            while (aliases.hasMoreElements()) {
+                String current = aliases.nextElement();
+                if (keyStore.isKeyEntry(current)) {
+                    alias = current;
+                    break;
+                }
+            }
+        }
+
+        if (alias == null) {
+            throw new IllegalStateException("No se encontró clave privada en el certificado .p12");
+        }
+
+        PrivateKey privateKey = (PrivateKey) keyStore.getKey(alias, password);
+        Certificate[] chain = keyStore.getCertificateChain(alias);
+        if (privateKey == null || chain == null || chain.length == 0) {
+            throw new IllegalStateException("Certificado .p12 inválido: falta clave privada o cadena de certificados");
+        }
+
+        return new CertBundle(privateKey, chain);
+    }
+
+    private CertBundle generarCertificadoAutofirmadoTemporal() throws GeneralSecurityException {
+        try {
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(2048);
+            KeyPair keyPair = keyPairGenerator.generateKeyPair();
+
+            X500Name dnName = new X500Name("CN=Alcaldia Cabuyaro, O=Municipio de Cabuyaro, C=CO");
+            BigInteger serial = BigInteger.valueOf(System.currentTimeMillis());
+            Date notBefore = new Date();
+            Date notAfter = Date.from(LocalDateTime.now().plusYears(2).atZone(ZoneId.systemDefault()).toInstant());
+
+            X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(
+                    dnName,
+                    serial,
+                    notBefore,
+                    notAfter,
+                    dnName,
+                    keyPair.getPublic()
+            );
+
+            ContentSigner contentSigner = new JcaContentSignerBuilder("SHA256withRSA")
+                    .setProvider("BC")
+                    .build(keyPair.getPrivate());
+
+            X509CertificateHolder holder = certBuilder.build(contentSigner);
+            X509Certificate certificate = new JcaX509CertificateConverter()
+                    .setProvider("BC")
+                    .getCertificate(holder);
+
+            return new CertBundle(keyPair.getPrivate(), new Certificate[]{certificate});
+        } catch (Exception e) {
+            throw new GeneralSecurityException("No fue posible generar certificado autofirmado temporal", e);
+        }
+    }
+
+    private record CertBundle(PrivateKey privateKey, Certificate[] chain) {
+    }
+
     private byte[] generarPdfDesdePlantillaDocx(Tramite tramite, boolean aprobado, String observacion) {
         String nombrePlantilla = obtenerNombrePlantilla(tramite, aprobado);
         Resource resource = resourceLoader.getResource("classpath:templates/" + nombrePlantilla);
@@ -400,7 +572,7 @@ public class DocumentoGeneradoService {
              XWPFDocument wordDoc = new XWPFDocument(inputStream)) {
 
             reemplazarMarcadoresEnDocumento(wordDoc, tramite, observacion);
-            insertarFirmaEnDocumento(wordDoc);
+            insertarFirmaEnDocumento(wordDoc, tramite);
             normalizarIdsInternosParaPdf(wordDoc);
             preservarEspaciadoPlantillaParaPdf(wordDoc);
             return convertirDocxConPlantillaAPdf(wordDoc);
@@ -636,48 +808,48 @@ public class DocumentoGeneradoService {
         }
     }
 
-    private void insertarFirmaEnDocumento(XWPFDocument document) {
+    private void insertarFirmaEnDocumento(XWPFDocument document, Tramite tramite) {
         for (XWPFParagraph paragraph : document.getParagraphs()) {
-            insertarFirmaEnParrafo(paragraph, document);
+            insertarFirmaEnParrafo(paragraph, document, tramite);
         }
 
         for (XWPFTable table : document.getTables()) {
-            insertarFirmaEnTabla(table, document);
+            insertarFirmaEnTabla(table, document, tramite);
         }
 
         for (XWPFHeader header : document.getHeaderList()) {
             for (XWPFParagraph paragraph : header.getParagraphs()) {
-                insertarFirmaEnParrafo(paragraph, document);
+                insertarFirmaEnParrafo(paragraph, document, tramite);
             }
             for (XWPFTable table : header.getTables()) {
-                insertarFirmaEnTabla(table, document);
+                insertarFirmaEnTabla(table, document, tramite);
             }
         }
 
         for (XWPFFooter footer : document.getFooterList()) {
             for (XWPFParagraph paragraph : footer.getParagraphs()) {
-                insertarFirmaEnParrafo(paragraph, document);
+                insertarFirmaEnParrafo(paragraph, document, tramite);
             }
             for (XWPFTable table : footer.getTables()) {
-                insertarFirmaEnTabla(table, document);
+                insertarFirmaEnTabla(table, document, tramite);
             }
         }
     }
 
-    private void insertarFirmaEnTabla(XWPFTable table, XWPFDocument document) {
+    private void insertarFirmaEnTabla(XWPFTable table, XWPFDocument document, Tramite tramite) {
         for (XWPFTableRow row : table.getRows()) {
             for (XWPFTableCell cell : row.getTableCells()) {
                 for (XWPFParagraph paragraph : cell.getParagraphs()) {
-                    insertarFirmaEnParrafo(paragraph, document);
+                    insertarFirmaEnParrafo(paragraph, document, tramite);
                 }
                 for (XWPFTable nested : cell.getTables()) {
-                    insertarFirmaEnTabla(nested, document);
+                    insertarFirmaEnTabla(nested, document, tramite);
                 }
             }
         }
     }
 
-    private void insertarFirmaEnParrafo(XWPFParagraph paragraph, XWPFDocument document) {
+    private void insertarFirmaEnParrafo(XWPFParagraph paragraph, XWPFDocument document, Tramite tramite) {
         if (paragraph == null || paragraph.getRuns() == null || paragraph.getRuns().isEmpty()) {
             return;
         }
@@ -737,6 +909,56 @@ public class DocumentoGeneradoService {
         if (!despues.isBlank()) {
             XWPFRun runDespues = paragraph.createRun();
             runDespues.setText(despues);
+        }
+
+        XWPFRun runLeyenda = paragraph.createRun();
+        runLeyenda.addBreak();
+        runLeyenda.setFontSize(9);
+        runLeyenda.setText(generarLeyendaFirmaDigital(tramite));
+
+        XWPFRun runHash = paragraph.createRun();
+        runHash.addBreak();
+        runHash.setFontSize(8);
+        runHash.setText("Hash de verificación: " + generarHashVisibleFirma(tramite));
+    }
+
+    private String generarLeyendaFirmaDigital(Tramite tramite) {
+        if (tramite == null) {
+            return "Documento firmado digitalmente por la Alcaldía Municipal de Cabuyaro.";
+        }
+
+        String firmante = nombreAlcaldePlantilla(tramite);
+        if (firmante == null || firmante.isBlank()) {
+            return "Documento firmado digitalmente por la Alcaldía Municipal de Cabuyaro.";
+        }
+
+        return "Documento firmado digitalmente por " + firmante + ".";
+    }
+
+    private String generarHashVisibleFirma(Tramite tramite) {
+        if (tramite == null) {
+            return "NO-DISPONIBLE";
+        }
+
+        String base = String.join("|",
+                valor(tramite.getNumeroRadicado()),
+                valor(tramite.getNumeroDocumento()),
+                valor(tramite.getCodigoVerificacion()),
+                valor(tramite.getTipo_certificado()),
+                tramite.getFechaFirmaAlcalde() != null ? tramite.getFechaFirmaAlcalde().toString() : ""
+        );
+
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(base.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder();
+            for (byte b : hash) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString().toUpperCase(LOCALE_ES);
+        } catch (NoSuchAlgorithmException e) {
+            logger.warn("No fue posible generar hash visible de firma digital: {}", e.getMessage());
+            return "NO-DISPONIBLE";
         }
     }
 
