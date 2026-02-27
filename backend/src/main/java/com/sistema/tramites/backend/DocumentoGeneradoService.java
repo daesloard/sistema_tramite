@@ -1,0 +1,1058 @@
+package com.sistema.tramites.backend;
+
+import com.lowagie.text.Document;
+import com.lowagie.text.DocumentException;
+import com.lowagie.text.Font;
+import com.lowagie.text.FontFactory;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.pdf.PdfReader;
+import com.lowagie.text.pdf.PdfStamper;
+import com.lowagie.text.pdf.PdfWriter;
+import org.docx4j.convert.out.pdf.PdfConversion;
+import org.docx4j.convert.out.pdf.viaXSLFO.Conversion;
+import org.docx4j.convert.out.pdf.viaXSLFO.PdfSettings;
+import org.docx4j.openpackaging.exceptions.Docx4JException;
+import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
+import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFFooter;
+import org.apache.poi.xwpf.usermodel.XWPFHeader;
+import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.apache.poi.xwpf.usermodel.XWPFRun;
+import org.apache.poi.xwpf.usermodel.XWPFTable;
+import org.apache.poi.xwpf.usermodel.XWPFTableCell;
+import org.apache.poi.xwpf.usermodel.XWPFTableRow;
+import org.apache.poi.util.Units;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTBookmark;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTHyperlink;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSpacing;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
+import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.text.Normalizer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.TextStyle;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+@Service
+public class DocumentoGeneradoService {
+
+    private static final Locale LOCALE_ES = new Locale("es", "CO");
+    private static final Logger logger = LoggerFactory.getLogger(DocumentoGeneradoService.class);
+    private static final java.math.BigInteger ESPACIO_UNO = java.math.BigInteger.valueOf(240L);
+    private static final java.math.BigInteger ESPACIO_DOS = java.math.BigInteger.valueOf(480L);
+    private static final java.math.BigInteger ESPACIO_FIRMA = java.math.BigInteger.valueOf(120L);
+    private static final String MARCADOR_FIRMA_ANGULAR = "<<firma.jpeg>>";
+    private static final String MARCADOR_FIRMA_GUILLEMET = "«firma.jpeg»";
+    private static final int FIRMA_ANCHO_PX = 220;
+    private static final int FIRMA_ALTO_PX = 80;
+
+    private final ResourceLoader resourceLoader;
+    private final boolean usarLibreOffice;
+
+    public DocumentoGeneradoService(ResourceLoader resourceLoader,
+                                    @Value("${app.pdf.use-libreoffice:false}") boolean usarLibreOffice) {
+        this.resourceLoader = resourceLoader;
+        this.usarLibreOffice = usarLibreOffice;
+    }
+
+    public void generarYAdjuntarPdf(Tramite tramite, boolean aprobado, String observacion) {
+        byte[] pdfBytes = generarPdfDocumento(tramite, aprobado, observacion);
+        byte[] pdfProtegido = protegerPdfContraEdicionYCopia(pdfBytes, tramite);
+
+        tramite.setContenidoPdfGenerado(pdfProtegido);
+        tramite.setNombrePdfGenerado(generarNombrePdf(tramite, aprobado));
+        tramite.setTipoContenidoPdfGenerado("application/pdf");
+    }
+
+    public byte[] generarPdfDocumento(Tramite tramite, boolean aprobado, String observacion) {
+        return generarPdfDesdePlantillaDocx(tramite, aprobado, observacion);
+    }
+
+    public String generarTextoDocumento(Tramite tramite, boolean aprobado, String observacion) {
+        String plantilla = obtenerNombrePlantilla(tramite, aprobado);
+        String texto = leerTextoPlantilla(plantilla);
+        return reemplazarMarcadores(texto, tramite, observacion);
+    }
+
+        public String generarHtmlDocumento(Tramite tramite, boolean aprobado, String observacion) {
+                LocalDateTime fechaBase = tramite.getFechaFirmaAlcalde() != null
+                                ? tramite.getFechaFirmaAlcalde()
+                                : LocalDateTime.now();
+
+                int dia = fechaBase.getDayOfMonth();
+                int anio = fechaBase.getYear();
+                String mes = capitalizar(fechaBase.getMonth().getDisplayName(TextStyle.FULL, LOCALE_ES));
+                String consecutivo = valor(tramite.getConsecutivoVerificador());
+                String nombre = escapeHtml(valorMayusculas(tramite.getNombreSolicitante()));
+                String tipoDoc = escapeHtml(valor(tramite.getTipoDocumento()));
+                String numeroDoc = escapeHtml(valor(tramite.getNumeroDocumento()));
+                String lugarExp = escapeHtml(valor(tramite.getLugarExpedicionDocumento()));
+                String direccion = escapeHtml(valorDireccionCertificado(tramite.getDireccionResidencia()));
+                String barrio = escapeHtml(valor(tramite.getBarrioResidencia()));
+                String obs = escapeHtml(valor(observacion));
+
+                String cuerpo;
+                if (!aprobado) {
+                        cuerpo = """
+                                <p><strong>Asunto:</strong> Respuesta a solicitud certificado de residencia.</p>
+                                <p>Señor(a): <strong>%s</strong>, identificado(a) con %s No. <strong>%s</strong> expedida en <strong>%s</strong>.</p>
+                                <p>Una vez revisadas las fuentes oficiales de información, este despacho informa que <strong>no es viable</strong> expedir el certificado solicitado.</p>
+                                <p><strong>Motivo:</strong> %s</p>
+                                <p>Cordialmente,</p>
+                        """.formatted(nombre, tipoDoc, numeroDoc, lugarExp, obs.isBlank() ? "No cumple con los criterios de validación vigentes." : obs);
+                } else {
+                        String fuente = obtenerFuenteSegunTipo(tramite);
+                        cuerpo = """
+                                <p>Que el(la) señor(a) <strong>%s</strong>, identificado(a) con %s No. <strong>%s</strong> expedida en <strong>%s</strong>, figura en la base de datos de <strong>%s</strong>, correspondiente a esta municipalidad.</p>
+                                <p>Se encuentra domiciliado(a) en la dirección <strong>%s</strong>, barrio <strong>%s</strong>.</p>
+                                <p>En consecuencia, tiene el carácter de habitante del Municipio de Cabuyaro (Meta), conforme a la normatividad vigente.</p>
+                                <p>Se expide para los fines pertinentes, a los <strong>%s</strong> (%s) días del mes de <strong>%s</strong> del año <strong>%s</strong> (%s).</p>
+                                <p>Cordialmente,</p>
+                        """.formatted(
+                                        nombre,
+                                        tipoDoc,
+                                        numeroDoc,
+                                        lugarExp,
+                                        escapeHtml(fuente),
+                                        direccion,
+                                        barrio,
+                                        numeroALetras(dia),
+                                        dia,
+                                        mes,
+                                        numeroALetras(anio),
+                                        anio
+                        );
+                }
+
+                                return """
+                        <!DOCTYPE html>
+                        <html lang="es">
+                        <head>
+                                                        <meta charset="UTF-8" />
+                                                        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                                                        <link rel="preconnect" href="https://fonts.googleapis.com">
+                                                        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                                                        <link href="https://fonts.googleapis.com/css2?family=Maven+Pro:wght@400;500;700;800&display=swap" rel="stylesheet">
+                            <style>
+                                                                * { box-sizing: border-box; }
+                                                                body {
+                                                                    font-family: 'Maven Pro', Arial, sans-serif;
+                                                                    margin: 28px;
+                                                                    color: #111;
+                                                                    background: #fff;
+                                                                    line-height: 1.45;
+                                                                }
+                                                                .header {
+                                                                    border: 1px solid #4b5563;
+                                                                    display: grid;
+                                                                    grid-template-columns: 160px 1fr 190px;
+                                                                    min-height: 112px;
+                                                                    margin-bottom: 14px;
+                                                                }
+                                                                .logo {
+                                                                    border-right: 1px solid #4b5563;
+                                                                    display:flex;
+                                                                    align-items:center;
+                                                                    justify-content:center;
+                                                                    font-weight:700;
+                                                                    font-size: 22px;
+                                                                    line-height: 1.1;
+                                                                    text-align:center;
+                                                                    color: #1f2937;
+                                                                }
+                                                                .centro {
+                                                                    padding: 8px;
+                                                                    text-align: center;
+                                                                    font-size: 13px;
+                                                                    border-right: 1px solid #4b5563;
+                                                                    display:flex;
+                                                                    flex-direction:column;
+                                                                    justify-content:center;
+                                                                    gap:6px;
+                                                                }
+                                .centro .titulo { font-weight: bold; }
+                                                                .meta {
+                                                                    font-size: 12px;
+                                                                    padding: 8px;
+                                                                    line-height: 1.35;
+                                                                    border-left: 1px solid #4b5563;
+                                                                }
+                                                                .meta strong { font-weight: 800; }
+                                                                .consecutivo {
+                                                                    margin-top: 14px;
+                                                                    margin-bottom: 18px;
+                                                                    font-size: 14px;
+                                                                    font-weight: 700;
+                                                                }
+                                                                h1 {
+                                                                    text-align:center;
+                                                                    font-size: 34px;
+                                                                    margin-top: 22px;
+                                                                    margin-bottom: 0;
+                                                                    font-weight: 800;
+                                                                }
+                                                                h2 {
+                                                                    text-align:center;
+                                                                    font-size: 28px;
+                                                                    margin-top: 14px;
+                                                                    margin-bottom: 30px;
+                                                                    font-weight: 800;
+                                                                }
+                                                                .cuerpo {
+                                                                    margin-top: 24px;
+                                                                    font-size: 31px;
+                                                                    line-height: 1.75;
+                                                                    text-align: justify;
+                                                                }
+                                                                .cuerpo p { margin: 0 0 34px 0; }
+                                                                .firma {
+                                                                    margin-top: 68px;
+                                                                    font-size: 32px;
+                                                                }
+                                                                .linea { width: 380px; border-top: 1px solid #000; margin-top: 24px; margin-bottom: 10px; }
+                                                                .pie {
+                                                                    margin-top: 28px;
+                                                                    font-size: 20px;
+                                                                    color: #222;
+                                                                    border-top: 1px solid #4b5563;
+                                                                    padding-top: 12px;
+                                                                }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="header">
+                                <div class="logo">Alcaldía de<br/>Cabuyaro</div>
+                                <div class="centro">
+                                    <div class="titulo">DEPARTAMENTO DEL META<br/>MUNICIPIO DE CABUYARO</div>
+                                    <div>NIT. 892099232-4</div>
+                                    <div><strong>DESPACHO ALCALDE</strong></div>
+                                    <div style="border-top:1px solid #666; margin-top:6px; padding-top:4px;"><strong>COMUNICACIONES OFICIALES</strong></div>
+                                </div>
+                                <div class="meta">CÓDIGO IJRD-100.09.01.<br/>VERSIÓN: 1<br/>Resolución 533/2018<br/>Página 1 de 1</div>
+                            </div>
+
+                            <div class="consecutivo"><strong>No°:</strong> %s</div>
+
+                            <h1>EL SUSCRITO ALCALDE MUNICIPAL DE CABUYARO (META)</h1>
+                            <h2>HACE CONSTAR:</h2>
+
+                            <div class="cuerpo">
+                                %s
+                            </div>
+
+                            <div class="firma">
+                                <div class="linea"></div>
+                                <div><strong>Alcalde Municipal</strong></div>
+                            </div>
+
+                            <div class="pie">Proy. y Elab.: Verificador Municipal</div>
+                        </body>
+                        </html>
+                        """.formatted(escapeHtml(consecutivo), cuerpo);
+        }
+
+    public String obtenerNombrePlantillaDocumento(Tramite tramite, boolean aprobado) {
+        return obtenerNombrePlantilla(tramite, aprobado);
+    }
+
+    private String obtenerNombrePlantilla(Tramite tramite, boolean aprobado) {
+        if (!aprobado) {
+            return "RESPUESTA NEGATIVA.docx";
+        }
+
+        String tipo = tramite.getTipo_certificado() == null ? "" : tramite.getTipo_certificado().toLowerCase();
+        if (tipo.contains("sisben")) {
+            return "CARTA RESIDENCIA SISBEN.docx";
+        }
+        if (tipo.contains("electoral")) {
+            return "CARTA RESIDENCIA REGISTRADURIA NACIONAL.docx";
+        }
+        return "CARTA RESIDENCIA JUNTA DE ACCION.docx";
+    }
+
+    private String leerTextoPlantilla(String nombrePlantilla) {
+        Resource resource = resourceLoader.getResource("classpath:templates/" + nombrePlantilla);
+        try (InputStream inputStream = resource.getInputStream();
+             XWPFDocument document = new XWPFDocument(inputStream);
+             XWPFWordExtractor extractor = new XWPFWordExtractor(document)) {
+            return extractor.getText();
+        } catch (IOException e) {
+            throw new IllegalStateException("No fue posible leer la plantilla: " + nombrePlantilla, e);
+        }
+    }
+
+    private String reemplazarMarcadores(String contenido, Tramite tramite, String observacion) {
+        LocalDateTime fechaBase = tramite.getFechaFirmaAlcalde() != null
+                ? tramite.getFechaFirmaAlcalde()
+                : LocalDateTime.now();
+
+        int dia = fechaBase.getDayOfMonth();
+        int anio = fechaBase.getYear();
+        String mes = fechaBase.getMonth().getDisplayName(TextStyle.FULL, LOCALE_ES);
+
+        String resultado = contenido;
+        resultado = reemplazarRegex(resultado, "«\\s*nombre\\s*s\\s*olicitante\\s*»|«\\s*nombre_colicitante\\s*»", valorMayusculas(tramite.getNombreSolicitante()));
+        resultado = reemplazarRegex(resultado, "«\\s*numero\\s*d\\s*ocumento\\s*»|«\\s*numero_documento\\s*»", valor(tramite.getNumeroDocumento()));
+        resultado = reemplazarRegex(resultado, "«\\s*lugarExpedicionDocumento\\s*»|«\\s*lugar_expedicion_documento\\s*»", valor(tramite.getLugarExpedicionDocumento()));
+        resultado = reemplazarRegex(resultado, "«\\s*direccionResidencia\\s*»", valorDireccionCertificado(tramite.getDireccionResidencia()));
+        resultado = reemplazarRegex(resultado, "«\\s*diasLetras\\s*»", numeroALetras(dia));
+        resultado = reemplazarRegex(resultado, "«\\s*dias\\s*»", String.valueOf(dia));
+        resultado = reemplazarRegex(resultado, "«\\s*mesLetras\\s*»", capitalizar(mes));
+        resultado = reemplazarRegex(resultado, "«\\s*añoLetra\\s*»", numeroALetras(anio));
+        resultado = reemplazarRegex(resultado, "«\\s*año\\s*»", String.valueOf(anio));
+        resultado = reemplazarRegex(resultado, "«\\s*alcalde\\s*»", nombreAlcaldePlantilla(tramite));
+        resultado = reemplazarRegex(resultado, "«\\s*verificador\\s*»", nombreVerificadorPlantilla(tramite));
+        resultado = reemplazarRegex(resultado, "«\\s*tipo_documento\\s*»", valor(tramite.getTipoDocumento()));
+        resultado = reemplazarRegex(resultado, "«\\s*observacion\\s*»", valor(observacion));
+        resultado = reemplazarRegex(resultado, "«\\s*consecutivo\\s*»|«\\s*consecutivo_verificador\\s*»", valor(tramite.getConsecutivoVerificador()));
+        resultado = reemplazarRegex(resultado, "«\\s*numeroRadicado\\s*»|«\\s*numeroRadico\\s*»|«\\s*numero_radicado\\s*»|«\\s*radicado\\s*»", valor(tramite.getNumeroRadicado()));
+
+        return resultado;
+    }
+
+    private String valorDireccionCertificado(String direccionResidencia) {
+        String direccion = valor(direccionResidencia);
+        if (direccion.isBlank()) {
+            return "";
+        }
+
+        String normalizada = Normalizer.normalize(direccion, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .trim()
+                .toLowerCase(LOCALE_ES);
+
+        if ("no aplica".equals(normalizada) || "n/a".equals(normalizada) || "na".equals(normalizada)) {
+            return "";
+        }
+
+        return direccion;
+    }
+
+    private byte[] convertirTextoAPdf(String texto) {
+        try {
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            Document document = new Document();
+            PdfWriter.getInstance(document, outputStream);
+            document.open();
+
+            Font font = FontFactory.getFont(FontFactory.HELVETICA, 11);
+            for (String linea : texto.split("\\r?\\n")) {
+                if (linea == null || linea.isBlank()) {
+                    document.add(new Paragraph(" "));
+                } else {
+                    document.add(new Paragraph(linea.trim(), font));
+                }
+            }
+
+            document.close();
+            return outputStream.toByteArray();
+        } catch (DocumentException e) {
+            throw new IllegalStateException("No fue posible generar el PDF", e);
+        }
+    }
+
+    private byte[] protegerPdfContraEdicionYCopia(byte[] pdfOriginal, Tramite tramite) {
+        if (pdfOriginal == null || pdfOriginal.length == 0) {
+            return pdfOriginal;
+        }
+
+        String radicado = valor(tramite != null ? tramite.getNumeroRadicado() : null);
+        String ownerPassword = "certificado-" + (radicado.isBlank() ? "cabuyaro" : radicado) + "-" + System.currentTimeMillis();
+
+        int permisos = PdfWriter.ALLOW_PRINTING | PdfWriter.ALLOW_DEGRADED_PRINTING;
+
+        try {
+            PdfReader reader = new PdfReader(pdfOriginal);
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            PdfStamper stamper = new PdfStamper(reader, outputStream);
+            stamper.setEncryption(null, ownerPassword.getBytes(StandardCharsets.UTF_8), permisos, true);
+            stamper.close();
+            reader.close();
+            return outputStream.toByteArray();
+        } catch (Exception ex) {
+            logger.warn("No fue posible aplicar protección anti-copia/edición al PDF: {}", ex.getMessage());
+            return pdfOriginal;
+        }
+    }
+
+    private byte[] generarPdfDesdePlantillaDocx(Tramite tramite, boolean aprobado, String observacion) {
+        String nombrePlantilla = obtenerNombrePlantilla(tramite, aprobado);
+        Resource resource = resourceLoader.getResource("classpath:templates/" + nombrePlantilla);
+
+        try (InputStream inputStream = resource.getInputStream();
+             XWPFDocument wordDoc = new XWPFDocument(inputStream)) {
+
+            reemplazarMarcadoresEnDocumento(wordDoc, tramite, observacion);
+            insertarFirmaEnDocumento(wordDoc);
+            normalizarIdsInternosParaPdf(wordDoc);
+            preservarEspaciadoPlantillaParaPdf(wordDoc);
+            return convertirDocxConPlantillaAPdf(wordDoc);
+        } catch (IOException e) {
+            throw new IllegalStateException("No fue posible generar PDF desde plantilla DOCX", e);
+        }
+    }
+
+    private void preservarEspaciadoPlantillaParaPdf(XWPFDocument document) {
+        int indiceParrafoPrincipal = 0;
+        for (XWPFParagraph paragraph : document.getParagraphs()) {
+            if (aplicarEspaciadoParrafoPrincipal(paragraph, indiceParrafoPrincipal)) {
+                indiceParrafoPrincipal++;
+            }
+        }
+
+        for (XWPFTable table : document.getTables()) {
+            ajustarTablaParaPdf(table);
+        }
+
+        for (XWPFHeader header : document.getHeaderList()) {
+            for (XWPFParagraph paragraph : header.getParagraphs()) {
+                ajustarParrafoParaPdf(paragraph);
+            }
+            for (XWPFTable table : header.getTables()) {
+                ajustarTablaParaPdf(table);
+            }
+        }
+
+        for (XWPFFooter footer : document.getFooterList()) {
+            for (XWPFParagraph paragraph : footer.getParagraphs()) {
+                ajustarParrafoParaPdf(paragraph);
+            }
+            for (XWPFTable table : footer.getTables()) {
+                ajustarTablaParaPdf(table);
+            }
+        }
+    }
+
+    private void ajustarTablaParaPdf(XWPFTable table) {
+        for (XWPFTableRow row : table.getRows()) {
+            for (XWPFTableCell cell : row.getTableCells()) {
+                for (XWPFParagraph paragraph : cell.getParagraphs()) {
+                    ajustarParrafoParaPdf(paragraph);
+                }
+                for (XWPFTable nested : cell.getTables()) {
+                    ajustarTablaParaPdf(nested);
+                }
+            }
+        }
+    }
+
+    private void ajustarParrafoParaPdf(XWPFParagraph paragraph) {
+        if (paragraph == null) {
+            return;
+        }
+
+        if (paragraph.getCTP() == null) {
+            return;
+        }
+
+        var pPr = paragraph.getCTP().isSetPPr() ? paragraph.getCTP().getPPr() : null;
+        if (pPr == null || !pPr.isSetSpacing()) {
+            return;
+        }
+
+        CTSpacing spacing = pPr.getSpacing();
+        if (spacing == null) {
+            return;
+        }
+
+        if (spacing.isSetAfter()) {
+            Object afterObj = spacing.getAfter();
+            if (afterObj instanceof java.math.BigInteger afterBigInteger) {
+                spacing.setAfter(afterBigInteger);
+            }
+        }
+        if (spacing.isSetBefore()) {
+            Object beforeObj = spacing.getBefore();
+            if (beforeObj instanceof java.math.BigInteger beforeBigInteger) {
+                spacing.setBefore(beforeBigInteger);
+            }
+        }
+    }
+
+    private boolean aplicarEspaciadoParrafoPrincipal(XWPFParagraph paragraph, int indiceParrafoPrincipal) {
+        if (paragraph == null) {
+            return false;
+        }
+
+        String texto = paragraph.getText() == null ? "" : paragraph.getText().trim();
+        if (texto.isBlank()) {
+            return false;
+        }
+
+        if (paragraph.getCTP() == null) {
+            return true;
+        }
+
+        var pPr = paragraph.getCTP().isSetPPr() ? paragraph.getCTP().getPPr() : paragraph.getCTP().addNewPPr();
+        CTSpacing spacing = pPr.isSetSpacing() ? pPr.getSpacing() : pPr.addNewSpacing();
+
+        String textoLower = texto.toLowerCase(LOCALE_ES);
+        boolean esLineaFirma = textoLower.contains("alcalde municipal");
+        if (esLineaFirma) {
+            spacing.setBefore(ESPACIO_FIRMA);
+            spacing.setAfter(java.math.BigInteger.ZERO);
+            return true;
+        }
+
+        if (indiceParrafoPrincipal == 0) {
+            spacing.setBefore(ESPACIO_UNO);
+            spacing.setAfter(ESPACIO_DOS);
+            return true;
+        }
+
+        if (indiceParrafoPrincipal == 1) {
+            spacing.setAfter(ESPACIO_DOS);
+            return true;
+        }
+
+        if (indiceParrafoPrincipal >= 2 && indiceParrafoPrincipal <= 4) {
+            spacing.setAfter(ESPACIO_UNO);
+            return true;
+        }
+
+        return true;
+    }
+
+    private void reemplazarMarcadoresEnDocumento(XWPFDocument document, Tramite tramite, String observacion) {
+        for (XWPFParagraph paragraph : document.getParagraphs()) {
+            reemplazarMarcadoresParrafo(paragraph, tramite, observacion);
+        }
+
+        for (XWPFTable table : document.getTables()) {
+            reemplazarMarcadoresTabla(table, tramite, observacion);
+        }
+
+        for (XWPFHeader header : document.getHeaderList()) {
+            for (XWPFParagraph paragraph : header.getParagraphs()) {
+                reemplazarMarcadoresParrafo(paragraph, tramite, observacion);
+            }
+            for (XWPFTable table : header.getTables()) {
+                reemplazarMarcadoresTabla(table, tramite, observacion);
+            }
+        }
+
+        for (XWPFFooter footer : document.getFooterList()) {
+            for (XWPFParagraph paragraph : footer.getParagraphs()) {
+                reemplazarMarcadoresParrafo(paragraph, tramite, observacion);
+            }
+            for (XWPFTable table : footer.getTables()) {
+                reemplazarMarcadoresTabla(table, tramite, observacion);
+            }
+        }
+    }
+
+    private void reemplazarMarcadoresTabla(XWPFTable table, Tramite tramite, String observacion) {
+        for (XWPFTableRow row : table.getRows()) {
+            for (XWPFTableCell cell : row.getTableCells()) {
+                for (XWPFParagraph paragraph : cell.getParagraphs()) {
+                    reemplazarMarcadoresParrafo(paragraph, tramite, observacion);
+                }
+                for (XWPFTable nested : cell.getTables()) {
+                    reemplazarMarcadoresTabla(nested, tramite, observacion);
+                }
+            }
+        }
+    }
+
+    private void reemplazarMarcadoresParrafo(XWPFParagraph paragraph, Tramite tramite, String observacion) {
+        if (paragraph.getRuns() == null || paragraph.getRuns().isEmpty()) {
+            return;
+        }
+
+        boolean reemplazoDirectoPorRun = false;
+        for (XWPFRun run : paragraph.getRuns()) {
+            String textoRun = run.getText(0);
+            if (textoRun == null || textoRun.isEmpty()) {
+                continue;
+            }
+
+            String reemplazadoRun = reemplazarMarcadores(textoRun, tramite, observacion);
+            if (!textoRun.equals(reemplazadoRun)) {
+                run.setText(reemplazadoRun, 0);
+                reemplazoDirectoPorRun = true;
+            }
+        }
+
+        if (reemplazoDirectoPorRun) {
+            return;
+        }
+
+        StringBuilder textoParrafo = new StringBuilder();
+        List<Integer> longitudesOriginales = new ArrayList<>();
+
+        for (XWPFRun run : paragraph.getRuns()) {
+            String textoRun = run.getText(0);
+            if (textoRun == null) {
+                textoRun = "";
+            }
+            textoParrafo.append(textoRun);
+            longitudesOriginales.add(textoRun.length());
+        }
+
+        if (textoParrafo.isEmpty()) {
+            return;
+        }
+
+        String original = textoParrafo.toString();
+        String reemplazado = reemplazarMarcadores(original, tramite, observacion);
+
+        if (original.equals(reemplazado)) {
+            return;
+        }
+
+        int indice = 0;
+        List<XWPFRun> runs = paragraph.getRuns();
+        for (int i = 0; i < runs.size(); i++) {
+            XWPFRun run = runs.get(i);
+            int longitudOriginal = longitudesOriginales.get(i);
+            String segmento;
+
+            if (i == runs.size() - 1) {
+                segmento = indice < reemplazado.length() ? reemplazado.substring(indice) : "";
+            } else {
+                int fin = Math.min(indice + longitudOriginal, reemplazado.length());
+                segmento = reemplazado.substring(indice, fin);
+                indice = fin;
+            }
+
+            run.setText(segmento, 0);
+        }
+    }
+
+    private void insertarFirmaEnDocumento(XWPFDocument document) {
+        for (XWPFParagraph paragraph : document.getParagraphs()) {
+            insertarFirmaEnParrafo(paragraph, document);
+        }
+
+        for (XWPFTable table : document.getTables()) {
+            insertarFirmaEnTabla(table, document);
+        }
+
+        for (XWPFHeader header : document.getHeaderList()) {
+            for (XWPFParagraph paragraph : header.getParagraphs()) {
+                insertarFirmaEnParrafo(paragraph, document);
+            }
+            for (XWPFTable table : header.getTables()) {
+                insertarFirmaEnTabla(table, document);
+            }
+        }
+
+        for (XWPFFooter footer : document.getFooterList()) {
+            for (XWPFParagraph paragraph : footer.getParagraphs()) {
+                insertarFirmaEnParrafo(paragraph, document);
+            }
+            for (XWPFTable table : footer.getTables()) {
+                insertarFirmaEnTabla(table, document);
+            }
+        }
+    }
+
+    private void insertarFirmaEnTabla(XWPFTable table, XWPFDocument document) {
+        for (XWPFTableRow row : table.getRows()) {
+            for (XWPFTableCell cell : row.getTableCells()) {
+                for (XWPFParagraph paragraph : cell.getParagraphs()) {
+                    insertarFirmaEnParrafo(paragraph, document);
+                }
+                for (XWPFTable nested : cell.getTables()) {
+                    insertarFirmaEnTabla(nested, document);
+                }
+            }
+        }
+    }
+
+    private void insertarFirmaEnParrafo(XWPFParagraph paragraph, XWPFDocument document) {
+        if (paragraph == null || paragraph.getRuns() == null || paragraph.getRuns().isEmpty()) {
+            return;
+        }
+
+        StringBuilder textoParrafo = new StringBuilder();
+        for (XWPFRun run : paragraph.getRuns()) {
+            String textoRun = run.getText(0);
+            textoParrafo.append(textoRun == null ? "" : textoRun);
+        }
+
+        String original = textoParrafo.toString();
+        if (original.isBlank()) {
+            return;
+        }
+
+        String marcador = null;
+        if (original.contains(MARCADOR_FIRMA_ANGULAR)) {
+            marcador = MARCADOR_FIRMA_ANGULAR;
+        } else if (original.contains(MARCADOR_FIRMA_GUILLEMET)) {
+            marcador = MARCADOR_FIRMA_GUILLEMET;
+        }
+
+        if (marcador == null) {
+            return;
+        }
+
+        String antes = original.substring(0, original.indexOf(marcador));
+        String despues = original.substring(original.indexOf(marcador) + marcador.length());
+
+        while (!paragraph.getRuns().isEmpty()) {
+            paragraph.removeRun(0);
+        }
+
+        if (!antes.isBlank()) {
+            XWPFRun runAntes = paragraph.createRun();
+            runAntes.setText(antes);
+        }
+
+        try {
+            Resource firma = resourceLoader.getResource("classpath:templates/firma.jpeg");
+            try (InputStream firmaInputStream = firma.getInputStream()) {
+                XWPFRun runFirma = paragraph.createRun();
+                runFirma.addPicture(
+                        firmaInputStream,
+                        XWPFDocument.PICTURE_TYPE_JPEG,
+                        "firma.jpeg",
+                        Units.toEMU(FIRMA_ANCHO_PX),
+                        Units.toEMU(FIRMA_ALTO_PX)
+                );
+            }
+        } catch (Exception ex) {
+            logger.warn("No fue posible insertar la firma desde templates/firma.jpeg: {}", ex.getMessage());
+            XWPFRun runFallback = paragraph.createRun();
+            runFallback.setText("[firma no disponible]");
+        }
+
+        if (!despues.isBlank()) {
+            XWPFRun runDespues = paragraph.createRun();
+            runDespues.setText(despues);
+        }
+    }
+
+    private void normalizarIdsInternosParaPdf(XWPFDocument document) {
+        Set<String> bookmarksUsados = new HashSet<>();
+
+        for (XWPFParagraph paragraph : document.getParagraphs()) {
+            normalizarParrafoParaPdf(paragraph, bookmarksUsados);
+        }
+
+        for (XWPFTable table : document.getTables()) {
+            normalizarTablaParaPdf(table, bookmarksUsados);
+        }
+
+        for (XWPFHeader header : document.getHeaderList()) {
+            for (XWPFParagraph paragraph : header.getParagraphs()) {
+                normalizarParrafoParaPdf(paragraph, bookmarksUsados);
+            }
+            for (XWPFTable table : header.getTables()) {
+                normalizarTablaParaPdf(table, bookmarksUsados);
+            }
+        }
+
+        for (XWPFFooter footer : document.getFooterList()) {
+            for (XWPFParagraph paragraph : footer.getParagraphs()) {
+                normalizarParrafoParaPdf(paragraph, bookmarksUsados);
+            }
+            for (XWPFTable table : footer.getTables()) {
+                normalizarTablaParaPdf(table, bookmarksUsados);
+            }
+        }
+    }
+
+    private void normalizarTablaParaPdf(XWPFTable table, Set<String> bookmarksUsados) {
+        for (XWPFTableRow row : table.getRows()) {
+            for (XWPFTableCell cell : row.getTableCells()) {
+                for (XWPFParagraph paragraph : cell.getParagraphs()) {
+                    normalizarParrafoParaPdf(paragraph, bookmarksUsados);
+                }
+                for (XWPFTable nested : cell.getTables()) {
+                    normalizarTablaParaPdf(nested, bookmarksUsados);
+                }
+            }
+        }
+    }
+
+    private void normalizarParrafoParaPdf(XWPFParagraph paragraph, Set<String> bookmarksUsados) {
+        if (paragraph == null || paragraph.getCTP() == null) {
+            return;
+        }
+
+        for (CTBookmark bookmark : paragraph.getCTP().getBookmarkStartList()) {
+            String nombre = bookmark.getName();
+            if (nombre == null || nombre.isBlank()) {
+                continue;
+            }
+
+            String nombreNormalizado = nombre;
+            int secuencia = 1;
+            while (bookmarksUsados.contains(nombreNormalizado)) {
+                nombreNormalizado = nombre + "_" + secuencia;
+                secuencia++;
+            }
+            bookmark.setName(nombreNormalizado);
+            bookmarksUsados.add(nombreNormalizado);
+        }
+
+        for (CTHyperlink hyperlink : paragraph.getCTP().getHyperlinkList()) {
+            if (hyperlink.isSetAnchor()) {
+                hyperlink.unsetAnchor();
+            }
+        }
+    }
+
+    private byte[] convertirDocxConPlantillaAPdf(XWPFDocument wordDoc) {
+        try {
+            ByteArrayOutputStream docxBytes = new ByteArrayOutputStream();
+            wordDoc.write(docxBytes);
+
+            byte[] docxContenido = docxBytes.toByteArray();
+            if (usarLibreOffice) {
+                byte[] pdfLibreOffice = convertirDocxConLibreOffice(docxContenido);
+                if (pdfLibreOffice != null && pdfLibreOffice.length > 0) {
+                    return pdfLibreOffice;
+                }
+                logger.warn("LibreOffice está habilitado pero no pudo convertir; se usará docx4j como respaldo.");
+            }
+
+            return convertirDocxConDocx4j(docxContenido);
+        } catch (IOException e) {
+            throw new IllegalStateException("No fue posible convertir la plantilla DOCX a PDF", e);
+        }
+    }
+
+    private byte[] convertirDocxConDocx4j(byte[] docxContenido) {
+        try {
+            WordprocessingMLPackage wordMLPackage = WordprocessingMLPackage.load(
+                    new ByteArrayInputStream(docxContenido)
+            );
+
+            PdfSettings pdfSettings = new PdfSettings();
+            PdfConversion conversion = new Conversion(wordMLPackage);
+
+            ByteArrayOutputStream pdfOutput = new ByteArrayOutputStream();
+            conversion.output(pdfOutput, pdfSettings);
+            return pdfOutput.toByteArray();
+        } catch (Docx4JException e) {
+            throw new IllegalStateException("No fue posible convertir la plantilla DOCX a PDF con docx4j", e);
+        }
+    }
+
+    private byte[] convertirDocxConLibreOffice(byte[] docxContenido) {
+        String ejecutable = resolverEjecutableSoffice();
+        if (ejecutable == null || ejecutable.isBlank()) {
+            return null;
+        }
+
+        Path dirTemporal = null;
+        try {
+            dirTemporal = Files.createTempDirectory("tramites-pdf-");
+            Path docxPath = dirTemporal.resolve("certificado.docx");
+            Path pdfPath = dirTemporal.resolve("certificado.pdf");
+            Files.write(docxPath, docxContenido);
+
+            ProcessBuilder pb = new ProcessBuilder(
+                    ejecutable,
+                    "--headless",
+                    "--convert-to", "pdf:writer_pdf_Export",
+                    "--outdir", dirTemporal.toString(),
+                    docxPath.toString()
+            );
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            boolean termino = process.waitFor(60, TimeUnit.SECONDS);
+            String salida = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+
+            if (!termino) {
+                process.destroyForcibly();
+                logger.warn("LibreOffice no terminó a tiempo al convertir DOCX a PDF");
+                return null;
+            }
+
+            if (process.exitValue() != 0) {
+                logger.warn("LibreOffice devolvió código {} al convertir DOCX a PDF. Salida: {}", process.exitValue(), salida);
+                return null;
+            }
+
+            if (!Files.exists(pdfPath)) {
+                logger.warn("LibreOffice no generó el PDF esperado en {}", pdfPath);
+                return null;
+            }
+
+            return Files.readAllBytes(pdfPath);
+        } catch (Exception ex) {
+            logger.warn("No fue posible convertir DOCX a PDF con LibreOffice: {}", ex.getMessage());
+            return null;
+        } finally {
+            eliminarDirectorioTemporal(dirTemporal);
+        }
+    }
+
+    private String resolverEjecutableSoffice() {
+        String desdeEnv = System.getenv("SOFFICE_PATH");
+        if (desdeEnv != null && !desdeEnv.isBlank() && Files.exists(Path.of(desdeEnv))) {
+            return desdeEnv;
+        }
+
+        String[] candidatos = new String[] {
+                "C:/Program Files/LibreOffice/program/soffice.exe",
+                "C:/Program Files (x86)/LibreOffice/program/soffice.exe",
+                "soffice"
+        };
+
+        for (String candidato : candidatos) {
+            try {
+                if ("soffice".equals(candidato) || Files.exists(Path.of(candidato))) {
+                    return candidato;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        return null;
+    }
+
+    private void eliminarDirectorioTemporal(Path directorio) {
+        if (directorio == null || !Files.exists(directorio)) {
+            return;
+        }
+
+        try (var stream = Files.walk(directorio)) {
+            stream.sorted(java.util.Comparator.reverseOrder())
+                    .forEach(path -> {
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (IOException ignored) {
+                        }
+                    });
+        } catch (IOException ignored) {
+        }
+    }
+
+    private String generarNombrePdf(Tramite tramite, boolean aprobado) {
+        String nombreSolicitante = valorMayusculas(tramite.getNombreSolicitante());
+        String nombreNormalizado = Normalizer.normalize(nombreSolicitante, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replaceAll("[^A-Z0-9]", "");
+
+        if (nombreNormalizado.isBlank()) {
+            nombreNormalizado = "SOLICITANTE";
+        }
+
+        return "CERTIFICADORESIDENCIA_" + nombreNormalizado + ".PDF";
+    }
+
+    private String nombreVerificadorPlantilla(Tramite tramite) {
+        if (tramite.getUsuarioVerificador() != null
+                && tramite.getUsuarioVerificador().getNombreCompleto() != null
+                && !tramite.getUsuarioVerificador().getNombreCompleto().isBlank()) {
+            return valorMayusculas(tramite.getUsuarioVerificador().getNombreCompleto());
+        }
+        return "VERIFICADOR MUNICIPAL";
+    }
+
+    private String nombreAlcaldePlantilla(Tramite tramite) {
+        if (tramite.getUsuarioAlcalde() != null
+                && tramite.getUsuarioAlcalde().getNombreCompleto() != null
+                && !tramite.getUsuarioAlcalde().getNombreCompleto().isBlank()) {
+            return valorMayusculas(tramite.getUsuarioAlcalde().getNombreCompleto());
+        }
+        return "ALCALDE MUNICIPAL";
+    }
+
+    private String reemplazarRegex(String texto, String regex, String reemplazo) {
+        return texto.replaceAll("(?i)" + regex, java.util.regex.Matcher.quoteReplacement(reemplazo));
+    }
+
+    private String valor(String texto) {
+        return texto == null ? "" : texto.trim();
+    }
+
+    private String valorMayusculas(String texto) {
+        return valor(texto).toUpperCase(LOCALE_ES);
+    }
+
+    private String escapeHtml(String text) {
+        if (text == null) return "";
+        return text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
+    }
+
+    private String obtenerFuenteSegunTipo(Tramite tramite) {
+        String tipo = tramite.getTipo_certificado() == null ? "" : tramite.getTipo_certificado().toLowerCase();
+        if (tipo.contains("sisben")) return "SISBEN";
+        if (tipo.contains("electoral")) return "REGISTRADURÍA NACIONAL";
+        return "JUNTA DE ACCIÓN COMUNAL";
+    }
+
+    private String capitalizar(String texto) {
+        if (texto == null || texto.isBlank()) {
+            return "";
+        }
+        return texto.substring(0, 1).toUpperCase(LOCALE_ES) + texto.substring(1);
+    }
+
+    private String numeroALetras(int numero) {
+        if (numero == 0) {
+            return "cero";
+        }
+        if (numero < 0) {
+            return "menos " + numeroALetras(-numero);
+        }
+
+        if (numero < 30) {
+            String[] unidades = {
+                    "", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve",
+                    "diez", "once", "doce", "trece", "catorce", "quince", "dieciseis", "diecisiete", "dieciocho", "diecinueve",
+                    "veinte", "veintiuno", "veintidos", "veintitres", "veinticuatro", "veinticinco", "veintiseis", "veintisiete", "veintiocho", "veintinueve"
+            };
+            return unidades[numero];
+        }
+
+        if (numero < 100) {
+            String[] decenas = {
+                    "", "", "", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"
+            };
+            int d = numero / 10;
+            int u = numero % 10;
+            return u == 0 ? decenas[d] : decenas[d] + " y " + numeroALetras(u);
+        }
+
+        if (numero < 1000) {
+            if (numero == 100) {
+                return "cien";
+            }
+            int c = numero / 100;
+            int resto = numero % 100;
+            String[] centenas = {
+                    "", "ciento", "doscientos", "trescientos", "cuatrocientos", "quinientos",
+                    "seiscientos", "setecientos", "ochocientos", "novecientos"
+            };
+            return resto == 0 ? centenas[c] : centenas[c] + " " + numeroALetras(resto);
+        }
+
+        if (numero < 1000000) {
+            int miles = numero / 1000;
+            int resto = numero % 1000;
+            String baseMiles = miles == 1 ? "mil" : numeroALetras(miles) + " mil";
+            return resto == 0 ? baseMiles : baseMiles + " " + numeroALetras(resto);
+        }
+
+        return String.valueOf(numero);
+    }
+}

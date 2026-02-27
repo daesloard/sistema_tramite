@@ -1,0 +1,622 @@
+package com.sistema.tramites.backend;
+
+import jakarta.validation.Valid;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Base64;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/tramites")
+public class TramiteController {
+
+    private final TramiteRepository tramiteRepository;
+    private final WorkingDayCalculator workingDayCalculator;
+    private final EmailService emailService;
+    private final DocumentoGeneradoService documentoGeneradoService;
+    private final UsuarioRepository usuarioRepository;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    public TramiteController(TramiteRepository tramiteRepository, 
+                           WorkingDayCalculator workingDayCalculator,
+                           EmailService emailService,
+                           DocumentoGeneradoService documentoGeneradoService,
+                           UsuarioRepository usuarioRepository) {
+        this.tramiteRepository = tramiteRepository;
+        this.workingDayCalculator = workingDayCalculator;
+        this.emailService = emailService;
+        this.documentoGeneradoService = documentoGeneradoService;
+        this.usuarioRepository = usuarioRepository;
+    }
+
+    @GetMapping
+    public List<Tramite> listar() {
+        return tramiteRepository.findAll();
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Tramite> obtener(@PathVariable Long id) {
+        Optional<Tramite> tramite = tramiteRepository.findById(id);
+        return tramite.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PostMapping
+    public ResponseEntity<Tramite> crear(@Valid @RequestBody Tramite tramite) {
+        if (tramite.getNumeroRadicado() == null || tramite.getNumeroRadicado().isBlank()) {
+            tramite.setNumeroRadicado(generarRadicado());
+        }
+        if (tramite.getFechaRadicacion() == null) {
+            tramite.setFechaRadicacion(LocalDateTime.now());
+        }
+        if (tramite.getEstado() == null) {
+            tramite.setEstado(EstadoTramite.RADICADO);
+        }
+        Tramite guardado = tramiteRepository.save(tramite);
+        return ResponseEntity.status(HttpStatus.CREATED).body(guardado);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Tramite> actualizar(@PathVariable Long id, @Valid @RequestBody Tramite entrada) {
+        return tramiteRepository.findById(id)
+                .map(actual -> {
+                    actual.setNombreSolicitante(entrada.getNombreSolicitante());
+                    actual.setTipoTramite(entrada.getTipoTramite());
+                    actual.setDescripcion(entrada.getDescripcion());
+                    actual.setEstado(entrada.getEstado() != null ? entrada.getEstado() : actual.getEstado());
+                    Tramite actualizado = tramiteRepository.save(actual);
+                    return ResponseEntity.ok(actualizado);
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> eliminar(@PathVariable Long id) {
+        if (!tramiteRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        tramiteRepository.deleteById(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * NUEVOS ENDPOINTS PARA CERTIFICADO DE RESIDENCIA
+     */
+
+    @PostMapping("/solicitud-residencia")
+    public ResponseEntity<?> radicacionCertificadoResidencia(
+            @Valid @RequestBody SolicitudCertificadoResidenciaDTO solicitud) {
+        try {
+            // Crear entidad Tramite
+            Tramite tramite = new Tramite();
+            tramite.setNumeroRadicado(generarRadicado());
+                tramite.setNombreSolicitante(solicitud.getNombre() != null
+                    ? solicitud.getNombre().trim().toUpperCase(new Locale("es", "CO"))
+                    : null);
+            tramite.setTipoTramite("CERTIFICADO_RESIDENCIA");
+            tramite.setFechaRadicacion(LocalDateTime.now());
+            tramite.setEstado(EstadoTramite.RADICADO);
+            
+            // Datos específicos del certificado
+            tramite.setTipoDocumento(solicitud.getTipoDocumento());
+            tramite.setNumeroDocumento(solicitud.getNumeroDocumento());
+            tramite.setLugarExpedicionDocumento(solicitud.getLugarExpedicionDocumento());
+            tramite.setDireccionResidencia(solicitud.getDireccionResidencia());
+            tramite.setBarrioResidencia(solicitud.getBarrioResidencia());
+            tramite.setTelefono(solicitud.getTelefono());
+            tramite.setCorreoElectronico(solicitud.getCorreoElectronico());
+            tramite.setTipo_certificado(solicitud.getTipo_certificado());
+            
+                // Guardar documentos en BLOB si se envían
+                if (solicitud.getDocumento_identidad_base64() != null && !solicitud.getDocumento_identidad_base64().isEmpty()) {
+                byte[] documentoIdentidad = Base64.getDecoder()
+                    .decode(solicitud.getDocumento_identidad_base64());
+                tramite.setContenidoDocumentoIdentidad(documentoIdentidad);
+                String nombreIdentidad = solicitud.getDocumento_identidad_nombre();
+                String tipoIdentidad = solicitud.getDocumento_identidad_tipo();
+                tramite.setNombreArchivoIdentidad(nombreIdentidad != null && !nombreIdentidad.isBlank()
+                    ? nombreIdentidad
+                    : "documento_identidad_" + System.currentTimeMillis());
+                tramite.setTipoContenidoIdentidad(tipoIdentidad != null && !tipoIdentidad.isBlank()
+                    ? tipoIdentidad
+                    : "application/pdf");
+                }
+
+                if (solicitud.getDocumento_solicitud_base64() != null && !solicitud.getDocumento_solicitud_base64().isEmpty()) {
+                byte[] documentoSolicitud = Base64.getDecoder()
+                    .decode(solicitud.getDocumento_solicitud_base64());
+                tramite.setContenidoDocumentoSolicitud(documentoSolicitud);
+                String nombreSolicitud = solicitud.getDocumento_solicitud_nombre();
+                String tipoSolicitud = solicitud.getDocumento_solicitud_tipo();
+                tramite.setNombreArchivoSolicitud(nombreSolicitud != null && !nombreSolicitud.isBlank()
+                    ? nombreSolicitud
+                    : "documento_solicitud_" + System.currentTimeMillis());
+                tramite.setTipoContenidoSolicitud(tipoSolicitud != null && !tipoSolicitud.isBlank()
+                    ? tipoSolicitud
+                    : "application/pdf");
+                }
+
+                if (solicitud.getCertificado_base64() != null && !solicitud.getCertificado_base64().isEmpty()) {
+                byte[] certificado = Base64.getDecoder()
+                    .decode(solicitud.getCertificado_base64());
+                String nombreCertificado = solicitud.getCertificado_nombre();
+                String tipoCertificado = solicitud.getCertificado_tipo();
+                String nombreFinal = nombreCertificado != null && !nombreCertificado.isBlank()
+                    ? nombreCertificado
+                    : "certificado_" + System.currentTimeMillis();
+                String tipoFinal = tipoCertificado != null && !tipoCertificado.isBlank()
+                    ? tipoCertificado
+                    : "application/pdf";
+
+                // Respaldo genérico: garantiza disponibilidad del 3er adjunto en correo de radicación
+                tramite.setContenidoDocumentoResidencia(certificado);
+                tramite.setNombreArchivoResidencia(nombreFinal);
+                tramite.setTipoContenidoResidencia(tipoFinal);
+
+                String tipoSeleccionado = solicitud.getTipo_certificado();
+                if ("SISBEN".equalsIgnoreCase(tipoSeleccionado)) {
+                    tramite.setContenidoCertificadoSisben(certificado);
+                    tramite.setNombreArchivoSisben(nombreFinal);
+                    tramite.setTipoContenidoSisben(tipoFinal);
+                } else if ("ELECTORAL".equalsIgnoreCase(tipoSeleccionado)) {
+                    tramite.setContenidoCertificadoElectoral(certificado);
+                    tramite.setNombreArchivoElectoral(nombreFinal);
+                    tramite.setTipoContenidoElectoral(tipoFinal);
+                } else {
+                    tramite.setContenidoDocumentoResidencia(certificado);
+                    tramite.setNombreArchivoResidencia(nombreFinal);
+                    tramite.setTipoContenidoResidencia(tipoFinal);
+                }
+                }
+            
+            // Rutas legacy para compatibilidad
+            tramite.setRuta_documento_solicitud("doc_solicitud_" + System.currentTimeMillis());
+            tramite.setRuta_documento_identidad("doc_identidad_" + System.currentTimeMillis());
+            tramite.setRuta_certificado("certificado_" + System.currentTimeMillis());
+            
+            // Calcular vencimiento (10 días hábiles)
+            LocalDate fechaVencimiento = workingDayCalculator
+                    .calcularFechaVencimiento(LocalDate.now(), 10);
+            tramite.setFechaVencimiento(fechaVencimiento);
+            
+            // Calcular vigencia (6 meses)
+            LocalDate inicioVigencia = guardadoFechaRadicacion(tramite);
+            tramite.setFechaVigencia(workingDayCalculator.calcularFechaVigencia(inicioVigencia));
+            
+            // Guardar en BD
+            Tramite guardado = tramiteRepository.save(tramite);
+            
+            // Enviar emails
+            emailService.enviarConfirmacionRadicacion(
+                    solicitud.getCorreoElectronico(),
+                    solicitud.getNombre(),
+                    guardado.getNumeroRadicado(),
+                    fechaVencimiento,
+                    guardado
+            );
+            
+            // Email al verificador (usar email configurado)
+            emailService.enviarNotificacionVerificador(
+                    "verificador@municipio.gov.co",
+                    guardado.getNumeroRadicado(),
+                    solicitud.getNombre()
+            );
+            
+            // Respuesta
+            var respuesta = new java.util.HashMap<String, Object>();
+            respuesta.put("tramiteId", guardado.getId());
+            respuesta.put("numeroRadicado", guardado.getNumeroRadicado());
+            respuesta.put("fechaSolicitud", guardado.getFechaRadicacion());
+            respuesta.put("fechaVencimiento", fechaVencimiento);
+            respuesta.put("estado", "RADICADO");
+            respuesta.put("mensaje", "Solicitud radicada exitosamente");
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(respuesta);
+            
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error en la radicación: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/verificacion")
+    public ResponseEntity<?> verificarSolicitud(@PathVariable Long id,
+                                               @Valid @RequestBody VerificacionSolicitudDTO verificacion) {
+        try {
+            Optional<Tramite> optTramite = tramiteRepository.findById(id);
+            if (optTramite.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            Tramite tramite = optTramite.get();
+            tramite.setEstado(EstadoTramite.EN_VALIDACION);
+            tramite.setObservaciones(verificacion.getObservaciones());
+
+            String usernameVerificador = (verificacion.getUsername() == null || verificacion.getUsername().isBlank())
+                    ? "verificador"
+                    : verificacion.getUsername().trim();
+            Optional<Usuario> usuarioVerificadorOpt = usuarioRepository
+                    .findByUsernameAndRolAndActivoTrue(usernameVerificador, RolUsuario.VERIFICADOR);
+            if (usuarioVerificadorOpt.isPresent()) {
+                tramite.setUsuarioVerificador(usuarioVerificadorOpt.get());
+            }
+
+            if (verificacion.getConsecutivo() != null && !verificacion.getConsecutivo().isBlank()) {
+                tramite.setConsecutivoVerificador(verificacion.getConsecutivo().trim());
+            }
+            
+            if (verificacion.isAprobado()) {
+                tramite.setEstado(EstadoTramite.EN_FIRMA);
+                tramite.setFechaVerificacion(LocalDateTime.now());
+                LocalDate inicioVigencia = guardadoFechaRadicacion(tramite);
+                tramite.setFechaVigencia(workingDayCalculator.calcularFechaVigencia(inicioVigencia));
+            } else {
+                tramite.setEstado(EstadoTramite.RECHAZADO);
+                tramite.setFechaVerificacion(null);
+                documentoGeneradoService.generarYAdjuntarPdf(tramite, false, verificacion.getObservaciones());
+                emailService.enviarDocumentoFinal(
+                        tramite.getCorreoElectronico(),
+                        tramite.getNombreSolicitante(),
+                        tramite.getNumeroRadicado(),
+                        false,
+                    verificacion.getObservaciones(),
+                    tramite.getContenidoPdfGenerado(),
+                    tramite.getNombrePdfGenerado()
+                );
+            }
+            
+            Tramite actualizado = tramiteRepository.save(tramite);
+            return ResponseEntity.ok(actualizado);
+            
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error en verificación: " + e.getMessage());
+        }
+    }
+
+    private LocalDate guardadoFechaRadicacion(Tramite tramite) {
+        if (tramite.getFechaRadicacion() != null) {
+            return tramite.getFechaRadicacion().toLocalDate();
+        }
+        return LocalDate.now();
+    }
+
+    @PostMapping("/{id}/firma-alcalde")
+    public ResponseEntity<?> firmarDocumento(@PathVariable Long id,
+                                            @Valid @RequestBody FirmaAlcaldeDTO firma) {
+        try {
+            Optional<Tramite> optTramite = tramiteRepository.findById(id);
+            if (optTramite.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+                String usernameFirma = (firma.getUsername() == null || firma.getUsername().isBlank())
+                    ? "alcalde"
+                    : firma.getUsername().trim();
+
+                Optional<Usuario> usuarioAlcaldeOpt = usuarioRepository
+                    .findByUsernameAndRolAndActivoTrue(usernameFirma, RolUsuario.ALCALDE);
+
+                if (usuarioAlcaldeOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body("Usuario de alcalde no válido o inactivo");
+                }
+
+                Usuario usuarioAlcalde = usuarioAlcaldeOpt.get();
+                String passwordFirma = firma.getFirmaDigital() != null ? firma.getFirmaDigital().trim() : "";
+                String passwordGuardada = usuarioAlcalde.getPasswordHash();
+
+                boolean passwordValida = false;
+                if (!passwordFirma.isBlank() && passwordGuardada != null && !passwordGuardada.isBlank()) {
+                    if (passwordFirma.equals(passwordGuardada)) {
+                        // Compatibilidad con datos legacy en texto plano
+                        passwordValida = true;
+                    } else {
+                        try {
+                            passwordValida = passwordEncoder.matches(passwordFirma, passwordGuardada);
+                        } catch (IllegalArgumentException ex) {
+                            passwordValida = false;
+                        }
+                    }
+                }
+
+                if (!passwordValida && "password123".equals(passwordFirma)) {
+                    // Compatibilidad temporal para entorno demo/desarrollo
+                    passwordValida = true;
+                }
+
+                if (!passwordValida) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body("Contraseña de firma incorrecta");
+                }
+            
+            Tramite tramite = optTramite.get();
+
+                if (tramite.getEstado() != EstadoTramite.EN_FIRMA) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("El trámite no está en estado EN_FIRMA");
+                }
+
+            tramite.setEstado(EstadoTramite.FINALIZADO);
+            tramite.setFirmaAlcalde("FIRMADO_POR_" + usernameFirma.toUpperCase());
+            tramite.setFechaFirmaAlcalde(LocalDateTime.now());
+                tramite.setUsuarioAlcalde(usuarioAlcalde);
+            documentoGeneradoService.generarYAdjuntarPdf(tramite, true, "");
+            
+            Tramite actualizado = tramiteRepository.save(tramite);
+            
+            // Enviar documento final al usuario
+            emailService.enviarDocumentoFinal(
+                    tramite.getCorreoElectronico(),
+                    tramite.getNombreSolicitante(),
+                    tramite.getNumeroRadicado(),
+                    true,
+                    "",
+                    tramite.getContenidoPdfGenerado(),
+                    tramite.getNombrePdfGenerado()
+            );
+            
+            return ResponseEntity.ok(actualizado);
+            
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error al firmar: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/verificacion/{numeroRadicado}")
+    public ResponseEntity<?> verificarCertificado(@PathVariable String numeroRadicado) {
+        try {
+            Optional<Tramite> tramite = tramiteRepository.findAll().stream()
+                    .filter(t -> t.getNumeroRadicado().equals(numeroRadicado))
+                    .findFirst();
+            
+            if (tramite.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("Radicado no encontrado");
+            }
+            
+            Tramite t = tramite.get();
+            
+            var respuesta = new java.util.HashMap<String, Object>();
+            respuesta.put("numeroRadicado", t.getNumeroRadicado());
+            respuesta.put("estado", t.getEstado().toString());
+            respuesta.put("nombreSolicitante", t.getNombreSolicitante());
+            respuesta.put("numeroDocumento", t.getNumeroDocumento());
+            respuesta.put("lugarExpedicionDocumento", t.getLugarExpedicionDocumento());
+            respuesta.put("direccionResidencia", t.getDireccionResidencia());
+            respuesta.put("barrioResidencia", t.getBarrioResidencia());
+            respuesta.put("fechaRadicacion", t.getFechaRadicacion());
+            
+            // VIGENCIA DEL CERTIFICADO: Solo disponible si está FINALIZADO (firmado por alcalde)
+            if (t.getEstado() == EstadoTramite.FINALIZADO) {
+                LocalDate hoy = LocalDate.now();
+                boolean vigente = hoy.isBefore(t.getFechaVigencia()) || hoy.isEqual(t.getFechaVigencia());
+                respuesta.put("certificadoEmitido", true);
+                respuesta.put("vigente", vigente);
+                respuesta.put("fechaVigencia", t.getFechaVigencia());
+                respuesta.put("fechaFirmaAlcalde", t.getFechaFirmaAlcalde());
+                respuesta.put("tiposCertificado", t.getTipo_certificado());
+            } else {
+                // Certificado aún no emitido
+                respuesta.put("certificadoEmitido", false);
+                respuesta.put("vigente", null);
+                respuesta.put("fechaVigencia", null);
+                respuesta.put("fechaFirmaAlcalde", null);
+                respuesta.put("mensaje", "El certificado aún no ha sido emitido. Estado actual: " + t.getEstado());
+            }
+            
+            // Mostrar observaciones si fue rechazado
+            if (t.getEstado() == EstadoTramite.RECHAZADO && t.getObservaciones() != null) {
+                respuesta.put("observaciones", t.getObservaciones());
+            }
+            
+            return ResponseEntity.ok(respuesta);
+            
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error en verificación: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/verificacion/resueltas/{numeroDocumento}")
+    public ResponseEntity<?> consultarSolicitudesResueltas(@PathVariable String numeroDocumento) {
+        try {
+            String documento = numeroDocumento == null ? "" : numeroDocumento.trim();
+            if (documento.isBlank()) {
+                return ResponseEntity.badRequest().body("Número de documento requerido");
+            }
+
+            List<java.util.Map<String, Object>> resueltas = tramiteRepository.findAll().stream()
+                    .filter(t -> t.getNumeroDocumento() != null && documento.equalsIgnoreCase(t.getNumeroDocumento().trim()))
+                    .filter(t -> t.getEstado() == EstadoTramite.FINALIZADO || t.getEstado() == EstadoTramite.RECHAZADO)
+                    .sorted((a, b) -> b.getFechaRadicacion().compareTo(a.getFechaRadicacion()))
+                    .map(t -> {
+                        java.util.Map<String, Object> item = new java.util.HashMap<>();
+                        item.put("id", t.getId());
+                        item.put("numeroRadicado", t.getNumeroRadicado());
+                        item.put("estado", t.getEstado() != null ? t.getEstado().name() : null);
+                        item.put("fechaRadicacion", t.getFechaRadicacion());
+                        item.put("fechaFirmaAlcalde", t.getFechaFirmaAlcalde());
+                        item.put("fechaVigencia", t.getFechaVigencia());
+                        item.put("tipoCertificado", t.getTipo_certificado());
+                        item.put("observaciones", t.getObservaciones());
+                        item.put("certificadoDisponible", t.getContenidoPdfGenerado() != null && t.getContenidoPdfGenerado().length > 0);
+                        return item;
+                    })
+                    .toList();
+
+            return ResponseEntity.ok(resueltas);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error consultando solicitudes resueltas: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/{id}/documento-generado")
+    public ResponseEntity<?> descargarDocumentoGenerado(@PathVariable Long id) {
+        try {
+            Optional<Tramite> optTramite = tramiteRepository.findById(id);
+            if (optTramite.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Trámite no encontrado");
+            }
+
+            Tramite tramite = optTramite.get();
+            if (tramite.getContenidoPdfGenerado() == null || tramite.getContenidoPdfGenerado().length == 0) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("No existe documento generado para este trámite");
+            }
+
+            String nombreArchivo = (tramite.getNombrePdfGenerado() != null && !tramite.getNombrePdfGenerado().isBlank())
+                    ? tramite.getNombrePdfGenerado()
+                    : "documento_generado_" + tramite.getNumeroRadicado() + ".pdf";
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nombreArchivo + "\"")
+                    .header(HttpHeaders.CONTENT_TYPE, "application/pdf")
+                    .body(tramite.getContenidoPdfGenerado());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error al descargar documento generado: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/{id}/vista-previa-documento")
+    public ResponseEntity<?> vistaPreviaDocumento(@PathVariable Long id) {
+        try {
+            Optional<Tramite> optTramite = tramiteRepository.findById(id);
+            if (optTramite.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Trámite no encontrado");
+            }
+
+            Tramite tramite = optTramite.get();
+            boolean aprobado = tramite.getEstado() != EstadoTramite.RECHAZADO;
+
+            String contenido = "";
+            String html = "";
+
+            try {
+                contenido = documentoGeneradoService.generarTextoDocumento(
+                        tramite,
+                        aprobado,
+                        tramite.getObservaciones()
+                );
+            } catch (Exception ignored) {
+                contenido = "";
+            }
+
+            try {
+                html = documentoGeneradoService.generarHtmlDocumento(tramite, aprobado, tramite.getObservaciones());
+            } catch (Exception ignored) {
+                html = "";
+            }
+
+            byte[] pdfVistaPrevia = null;
+            String errorPdf = null;
+            try {
+                pdfVistaPrevia = documentoGeneradoService.generarPdfDocumento(
+                        tramite,
+                        aprobado,
+                        tramite.getObservaciones()
+                );
+            } catch (Exception ex) {
+                errorPdf = ex.getMessage();
+            }
+
+            var respuesta = new java.util.HashMap<String, Object>();
+            respuesta.put("tramiteId", tramite.getId());
+            respuesta.put("numeroRadicado", tramite.getNumeroRadicado());
+            respuesta.put("estado", tramite.getEstado() != null ? tramite.getEstado().name() : null);
+            respuesta.put("plantilla", documentoGeneradoService.obtenerNombrePlantillaDocumento(tramite, aprobado));
+            respuesta.put("contenido", contenido);
+            respuesta.put("html", html);
+            respuesta.put("pdfBase64", pdfVistaPrevia != null && pdfVistaPrevia.length > 0
+                    ? Base64.getEncoder().encodeToString(pdfVistaPrevia)
+                    : null);
+            respuesta.put("pdfDisponible", pdfVistaPrevia != null && pdfVistaPrevia.length > 0);
+            if (errorPdf != null && !errorPdf.isBlank()) {
+                respuesta.put("pdfError", errorPdf);
+            }
+
+            return ResponseEntity.ok(respuesta);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error al generar vista previa: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/reporte/consolidado-verificaciones")
+    public ResponseEntity<?> descargarConsolidadoVerificaciones() {
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+
+            Sheet sheet = workbook.createSheet("Consolidado Verificaciones");
+
+            Row header = sheet.createRow(0);
+            header.createCell(0).setCellValue("Radicado");
+            header.createCell(1).setCellValue("Consecutivo Verificador");
+            header.createCell(2).setCellValue("Solicitante");
+            header.createCell(3).setCellValue("Documento");
+            header.createCell(4).setCellValue("Tipo Certificado");
+            header.createCell(5).setCellValue("Estado");
+            header.createCell(6).setCellValue("Fecha Radicación");
+            header.createCell(7).setCellValue("Fecha Firma Alcalde");
+            header.createCell(8).setCellValue("Observaciones");
+
+                List<Tramite> tramites = tramiteRepository.findAll().stream()
+                    .sorted((a, b) -> a.getFechaRadicacion().compareTo(b.getFechaRadicacion()))
+                    .toList();
+
+            int rowIndex = 1;
+            for (Tramite t : tramites) {
+                Row row = sheet.createRow(rowIndex++);
+                row.createCell(0).setCellValue(valor(t.getNumeroRadicado()));
+                row.createCell(1).setCellValue(valor(t.getConsecutivoVerificador()));
+                row.createCell(2).setCellValue(valor(t.getNombreSolicitante()));
+                row.createCell(3).setCellValue(valor(t.getNumeroDocumento()));
+                row.createCell(4).setCellValue(valor(t.getTipo_certificado()));
+                row.createCell(5).setCellValue(t.getEstado() != null ? t.getEstado().name() : "");
+                row.createCell(6).setCellValue(t.getFechaRadicacion() != null ? t.getFechaRadicacion().toString() : "");
+                row.createCell(7).setCellValue(t.getFechaFirmaAlcalde() != null ? t.getFechaFirmaAlcalde().toString() : "");
+                row.createCell(8).setCellValue(valor(t.getObservaciones()));
+            }
+
+            for (int i = 0; i <= 8; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            workbook.write(outputStream);
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"consolidado_verificaciones.xlsx\"")
+                    .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(outputStream.toByteArray());
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error al generar el consolidado Excel: " + e.getMessage());
+        }
+    }
+
+    private String valor(String valor) {
+        return valor == null ? "" : valor;
+    }
+
+    private String generarRadicado() {
+        return "RES-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+    }
+}
+
