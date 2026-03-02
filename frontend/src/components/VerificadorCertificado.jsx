@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   verificarCertificado,
   consultarSolicitudesResueltas,
@@ -188,8 +188,23 @@ const styles = {
   resueltasVacio: { margin: 0, color: '#666' },
 };
 
+const FACTORES_VALIDACION = [
+  {
+    tipo: 'PRIMER_NOMBRE',
+    placeholder: 'Primer nombre del solicitante',
+    ayuda: 'Primer nombre tal como fue registrado en la solicitud.',
+  },
+  {
+    tipo: 'ULTIMOS_3_DOCUMENTO',
+    placeholder: 'Últimos 3 dígitos del documento',
+    ayuda: 'Solo los últimos 3 dígitos del número de documento.',
+  },
+];
+
 export default function VerificadorCertificado() {
   const [numeroRadicado, setNumeroRadicado] = useState('');
+  const [factorTipo, setFactorTipo] = useState('');
+  const [factorValor, setFactorValor] = useState('');
   const [resultado, setResultado] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -197,6 +212,18 @@ export default function VerificadorCertificado() {
   const [solicitudesResueltas, setSolicitudesResueltas] = useState([]);
   const [loadingResueltas, setLoadingResueltas] = useState(false);
   const [errorResueltas, setErrorResueltas] = useState('');
+
+  const factorActual = FACTORES_VALIDACION.find((f) => f.tipo === factorTipo) || FACTORES_VALIDACION[0];
+
+  const elegirFactorAleatorio = () => {
+    const idx = Math.floor(Math.random() * FACTORES_VALIDACION.length);
+    setFactorTipo(FACTORES_VALIDACION[idx].tipo);
+    setFactorValor('');
+  };
+
+  useEffect(() => {
+    elegirFactorAleatorio();
+  }, []);
 
   const buscarResueltas = async (numeroDocumento) => {
     if (!numeroDocumento) {
@@ -223,12 +250,17 @@ export default function VerificadorCertificado() {
       return;
     }
 
+    if (!factorValor.trim()) {
+      setError('Por favor ingresa el dato de validación solicitado');
+      return;
+    }
+
     setLoading(true);
     setError('');
     setBuscado(true);
 
     try {
-      const data = await verificarCertificado(numeroRadicado);
+      const data = await verificarCertificado(numeroRadicado, factorTipo, factorValor);
       setResultado(data);
       await buscarResueltas(data?.numeroDocumento);
     } catch (err) {
@@ -248,6 +280,7 @@ export default function VerificadorCertificado() {
 
   const handleReiniciar = () => {
     setNumeroRadicado('');
+    elegirFactorAleatorio();
     setResultado(null);
     setError('');
     setBuscado(false);
@@ -293,6 +326,14 @@ export default function VerificadorCertificado() {
                 onKeyPress={handleKeyPress}
                 style={styles.inputRadicado}
               />
+              <input
+                type="text"
+                placeholder={factorActual.placeholder}
+                value={factorValor}
+                onChange={(e) => setFactorValor(e.target.value)}
+                onKeyPress={handleKeyPress}
+                style={{ ...styles.inputRadicado, fontFamily: 'inherit', letterSpacing: 'normal', textTransform: 'none' }}
+              />
               <button 
                 onClick={handleBuscar} 
                 disabled={loading}
@@ -305,10 +346,15 @@ export default function VerificadorCertificado() {
               </button>
             </div>
 
+            <p style={{ marginTop: '-1rem', marginBottom: '1.25rem', color: '#4b5563', fontSize: '0.9rem' }}>
+              Reto actual: <strong>{factorActual.ayuda}</strong>
+            </p>
+
             <div style={styles.instrucciones}>
               <h3 style={styles.instruccionesTitulo}>¿Cómo usar este servicio?</h3>
               <ul style={styles.instruccionesLista}>
                 <li style={styles.instruccionesItem}>Ingresa el número de radicado que recibiste por correo</li>
+                <li style={styles.instruccionesItem}>Completa el dato aleatorio de validación que te solicita el sistema</li>
                 <li style={styles.instruccionesItem}>También puedes usar el código único de verificación del certificado</li>
                 <li style={styles.instruccionesItem}>Podrás ver el estado actual de tu solicitud</li>
                 <li style={styles.instruccionesItem}>Verifica si tu certificado aún está vigente (6 meses)</li>

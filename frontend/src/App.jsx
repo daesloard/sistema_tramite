@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { listarTramites } from './services/api';
 import { API_AUTH_URL } from './config/api';
+import { API_TRAMITES_URL } from './config/api';
 import FormularioCertificado from './components/FormularioCertificado';
 import VerificadorCertificado from './components/VerificadorCertificado';
 import PanelVerificador from './components/PanelVerificador';
@@ -170,6 +171,18 @@ const styles = {
   listaCertificados: { display: 'grid', gap: '8px', maxHeight: '220px', overflowY: 'auto' },
   certItem: { border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 10px', background: '#f9fafb' },
   certMeta: { margin: '2px 0', fontSize: '12px', color: '#4b5563' },
+  adminDocs: { marginTop: '0.9rem', display: 'flex', flexDirection: 'column', gap: '8px' },
+  adminDocItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fff' },
+  adminDocLabel: { color: '#1f2937', fontSize: '0.9rem', fontWeight: 600 },
+  adminDocBtns: { display: 'flex', gap: '8px' },
+  btnDocVer: { padding: '6px 10px', border: 'none', borderRadius: '6px', background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '12px' },
+  btnDocDesc: { padding: '6px 10px', border: 'none', borderRadius: '6px', background: '#059669', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '12px' },
+  btnNotificarVerificador: { padding: '8px 12px', border: 'none', borderRadius: '6px', background: '#d97706', color: '#fff', cursor: 'pointer', fontWeight: 600, marginTop: '10px' },
+  inputAdminMensaje: { width: '100%', border: '1px solid #cfd8dc', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', boxSizing: 'border-box', marginTop: '10px' },
+  adminNota: { marginTop: '8px', fontSize: '12px', color: '#6b7280' },
+  badgeDocsPendientes: { display: 'inline-block', marginTop: '6px', padding: '4px 8px', borderRadius: '999px', background: '#fff3e0', color: '#b45309', fontSize: '11px', fontWeight: 700 },
+  badgeDocsOk: { display: 'inline-block', marginTop: '6px', padding: '4px 8px', borderRadius: '999px', background: '#e8f5e9', color: '#15803d', fontSize: '11px', fontWeight: 700 },
+  faltantesTexto: { margin: '6px 0 0 0', fontSize: '12px', color: '#92400e' },
 };
 
 const getEstadoBadgeStyle = (estado) => {
@@ -246,6 +259,12 @@ export default function App() {
   const [certificadosExpandido, setCertificadosExpandido] = useState(false);
   const [usuarioActual, setUsuarioActual] = useState(null);
   const [vistaLoginDestino, setVistaLoginDestino] = useState(null);
+  const [documentStatusAdmin, setDocumentStatusAdmin] = useState({});
+  const [loadingDocumentStatusAdminId, setLoadingDocumentStatusAdminId] = useState(null);
+  const [notificandoVerificadorId, setNotificandoVerificadorId] = useState(null);
+  const [mensajeGestionAdmin, setMensajeGestionAdmin] = useState('');
+  const [archivoCargaAdmin, setArchivoCargaAdmin] = useState({});
+  const [subiendoDocumentoAdminKey, setSubiendoDocumentoAdminKey] = useState('');
 
   const cargarTramites = useCallback(async () => {
     setLoading(true);
@@ -403,6 +422,159 @@ export default function App() {
       return matchRadicado && matchNombre && matchTipo;
     });
 
+  const resolverClaveCertificado = (tipoCertificado) => {
+    const tipo = (tipoCertificado || '').toLowerCase();
+    if (tipo === 'electoral') return 'electoral';
+    if (tipo === 'jac') return 'residencia';
+    return 'sisben';
+  };
+
+  const obtenerDocumentosAdmin = (tramite) => {
+    const claveCertificado = resolverClaveCertificado(tramite?.tipo_certificado);
+    return [
+      { key: 'identidad', label: 'Documento de Identidad' },
+      { key: 'solicitud', label: 'Documento de Solicitud' },
+      { key: claveCertificado, label: `Certificado (${(tramite?.tipo_certificado || claveCertificado).toUpperCase()})` },
+    ];
+  };
+
+  const obtenerFaltantesDocumentales = (tramiteId, documentosAdmin) => {
+    const estado = documentStatusAdmin?.[tramiteId];
+    if (!estado) return [];
+    return documentosAdmin.filter((doc) => !estado?.[doc.key]?.cargado).map((doc) => doc.label);
+  };
+
+  const cargarEstadoDocumentosAdmin = async (tramiteId) => {
+    setLoadingDocumentStatusAdminId(tramiteId);
+    try {
+      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/verificar-documentos`);
+      if (!response.ok) throw new Error('No se pudo cargar el estado documental');
+      const data = await response.json();
+      setDocumentStatusAdmin((prev) => ({ ...prev, [tramiteId]: data }));
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    } finally {
+      setLoadingDocumentStatusAdminId(null);
+    }
+  };
+
+  const abrirDocumentoAdmin = async (tramiteId, tipo) => {
+    try {
+      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/descargar/${tipo}`);
+      if (!response.ok) throw new Error('Documento no disponible para abrir');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  };
+
+  const descargarDocumentoAdmin = async (tramiteId, tipo) => {
+    try {
+      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/descargar/${tipo}`);
+      if (!response.ok) throw new Error('Documento no disponible para descarga');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${tipo}_${tramiteId}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  };
+
+  const toggleDetalleTramiteAdmin = async (tramiteId) => {
+    const nuevo = tramiteExpandidoId === tramiteId ? null : tramiteId;
+    setTramiteExpandidoId(nuevo);
+    if (nuevo && !documentStatusAdmin[tramiteId]) {
+      await cargarEstadoDocumentosAdmin(tramiteId);
+    }
+  };
+
+  const notificarVerificadorDesdeAdmin = async (tramite) => {
+    if (!usuarioActual?.username) return;
+
+    const docs = obtenerDocumentosAdmin(tramite);
+    const docsCompletos = docs.length > 0 && docs.every((doc) => !!documentStatusAdmin?.[tramite.id]?.[doc.key]?.cargado);
+    if (!docsCompletos) {
+      alert('❌ No puedes notificar aún: faltan documentos por cargar.');
+      return;
+    }
+
+    setNotificandoVerificadorId(tramite.id);
+    try {
+      const response = await fetch(`${API_TRAMITES_URL}/${tramite.id}/notificar-verificador`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Username': usuarioActual.username,
+        },
+        body: JSON.stringify({ mensaje: mensajeGestionAdmin.trim() }),
+      });
+
+      if (!response.ok) {
+        const msg = await response.text();
+        throw new Error(msg || 'No se pudo notificar al verificador');
+      }
+
+      const data = await response.json();
+      alert(`✅ Verificador(es) notificados: ${data.notificados || 0}`);
+      setMensajeGestionAdmin('');
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    } finally {
+      setNotificandoVerificadorId(null);
+    }
+  };
+
+  const seleccionarArchivoAdmin = (tramiteId, tipoDocumento, file) => {
+    if (!file) return;
+    const key = `${tramiteId}-${tipoDocumento}`;
+    setArchivoCargaAdmin((prev) => ({ ...prev, [key]: file }));
+  };
+
+  const subirDocumentoAdmin = async (tramite, tipoDocumento) => {
+    const key = `${tramite.id}-${tipoDocumento}`;
+    const archivo = archivoCargaAdmin[key];
+    if (!archivo) {
+      alert('❌ Debes seleccionar un archivo antes de cargar.');
+      return;
+    }
+
+    setSubiendoDocumentoAdminKey(key);
+    try {
+      const formData = new FormData();
+      formData.append('file', archivo);
+
+      const response = await fetch(`${API_TRAMITES_URL}/${tramite.id}/upload-${tipoDocumento}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const msg = await response.text();
+        throw new Error(msg || 'No se pudo cargar el documento');
+      }
+
+      await cargarEstadoDocumentosAdmin(tramite.id);
+      setArchivoCargaAdmin((prev) => {
+        const copy = { ...prev };
+        delete copy[key];
+        return copy;
+      });
+      alert('✅ Documento cargado correctamente');
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    } finally {
+      setSubiendoDocumentoAdminKey('');
+    }
+  };
+
   if (vista === 'inicio') {
     return (
       <div style={styles.appInicio}>
@@ -410,7 +582,7 @@ export default function App() {
           <div style={styles.headerMarcaInicio}>
             <img src="/escudo.png" alt="Escudo del municipio" style={styles.headerEscudoInicio} />
             <div style={styles.headerTextoInicio}>
-              <h1 style={styles.headerTitle}>Ventanilla Virtual</h1>
+              <h1 style={styles.headerTitle}>Ventanilla Unica Virtual</h1>
               <p style={styles.headerSubtitle}>Sistema Municipal de Trámites</p>
             </div>
           </div>
@@ -620,6 +792,10 @@ export default function App() {
                   <tbody>
                     {tramites.map((tramite) => {
                       const expandido = tramiteExpandidoId === tramite.id;
+                      const documentosAdmin = obtenerDocumentosAdmin(tramite);
+                      const faltantesDocumentales = obtenerFaltantesDocumentales(tramite.id, documentosAdmin);
+                      const documentosCompletos = documentosAdmin.length > 0
+                        && documentosAdmin.every((doc) => !!documentStatusAdmin?.[tramite.id]?.[doc.key]?.cargado);
                       return (
                         <Fragment key={tramite.id}>
                           <tr>
@@ -628,13 +804,20 @@ export default function App() {
                             <td style={styles.td}>{tramite.tipoTramite}</td>
                             <td style={styles.td}>
                               <span style={{ ...styles.badge, ...getEstadoBadgeStyle(tramite.estado) }}>{tramite.estado}</span>
+                              {documentStatusAdmin?.[tramite.id]
+                                ? (
+                                  faltantesDocumentales.length > 0
+                                    ? <div style={styles.badgeDocsPendientes}>Faltan {faltantesDocumentales.length} documento(s)</div>
+                                    : <div style={styles.badgeDocsOk}>Documentos en regla</div>
+                                )
+                                : null}
                             </td>
                             <td style={styles.td}>{formatoFecha(tramite.fechaRadicacion)}</td>
                             <td style={styles.td}>{formatoFecha(tramite.fechaVencimiento)}</td>
                             <td style={styles.td}>
                               <button
                                 style={styles.btnVer}
-                                onClick={() => setTramiteExpandidoId((prev) => (prev === tramite.id ? null : tramite.id))}
+                                onClick={() => toggleDetalleTramiteAdmin(tramite.id)}
                               >
                                 {expandido ? 'Ocultar' : 'Ver'}
                               </button>
@@ -658,6 +841,73 @@ export default function App() {
                                     <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Fecha Vencimiento:</span> {formatoFecha(tramite.fechaVencimiento)}</p>
                                     <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Fecha Vigencia:</span> {formatoFecha(tramite.fechaVigencia)}</p>
                                     <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Observaciones:</span> {tramite.observaciones || '-'}</p>
+                                  </div>
+
+                                  <div style={styles.adminDocs}>
+                                    <h4 style={{ margin: 0, color: '#1f2937' }}>Documentos del trámite</h4>
+                                    {loadingDocumentStatusAdminId === tramite.id ? <p style={styles.adminNota}>Cargando estado documental...</p> : null}
+                                    {!loadingDocumentStatusAdminId && documentStatusAdmin?.[tramite.id]
+                                      ? (faltantesDocumentales.length > 0
+                                        ? <p style={styles.faltantesTexto}>Faltantes detectados: {faltantesDocumentales.join(', ')}</p>
+                                        : <p style={{ ...styles.faltantesTexto, color: '#166534' }}>Todos los documentos requeridos están cargados.</p>)
+                                      : null}
+                                    {documentosAdmin.map((doc) => {
+                                      const disponible = !!documentStatusAdmin?.[tramite.id]?.[doc.key]?.cargado;
+                                      const claveArchivo = `${tramite.id}-${doc.key}`;
+                                      const archivoSeleccionado = archivoCargaAdmin[claveArchivo];
+                                      const subiendoEste = subiendoDocumentoAdminKey === claveArchivo;
+                                      return (
+                                        <div key={`${tramite.id}-${doc.key}`} style={styles.adminDocItem}>
+                                          <span style={styles.adminDocLabel}>{doc.label}</span>
+                                          <div style={styles.adminDocBtns}>
+                                            {disponible ? (
+                                              <>
+                                                <button style={styles.btnDocVer} onClick={() => abrirDocumentoAdmin(tramite.id, doc.key)}>Ver</button>
+                                                <button style={styles.btnDocDesc} onClick={() => descargarDocumentoAdmin(tramite.id, doc.key)}>Descargar</button>
+                                              </>
+                                            ) : (
+                                              <span style={styles.adminNota}>No disponible</span>
+                                            )}
+                                            <input
+                                              type="file"
+                                              accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                                              onChange={(e) => seleccionarArchivoAdmin(tramite.id, doc.key, e.target.files?.[0])}
+                                              style={{ maxWidth: '220px' }}
+                                            />
+                                            <button
+                                              style={{ ...styles.btnDocDesc, ...(subiendoEste ? styles.btnGuardarUsuarioDisabled : {}) }}
+                                              onClick={() => subirDocumentoAdmin(tramite, doc.key)}
+                                              disabled={subiendoEste || !archivoSeleccionado}
+                                            >
+                                              {subiendoEste ? 'Subiendo...' : (disponible ? 'Reemplazar' : 'Cargar')}
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+
+                                    <input
+                                      style={styles.inputAdminMensaje}
+                                      placeholder="Mensaje para el verificador (opcional)"
+                                      value={tramiteExpandidoId === tramite.id ? mensajeGestionAdmin : ''}
+                                      onChange={(e) => setMensajeGestionAdmin(e.target.value)}
+                                    />
+                                    <button
+                                      style={{ ...styles.btnNotificarVerificador, ...(notificandoVerificadorId === tramite.id ? styles.btnGuardarUsuarioDisabled : {}) }}
+                                      onClick={() => notificarVerificadorDesdeAdmin(tramite)}
+                                      disabled={notificandoVerificadorId === tramite.id || !documentosCompletos}
+                                    >
+                                      {notificandoVerificadorId === tramite.id
+                                        ? 'Notificando...'
+                                        : (documentosCompletos
+                                          ? '📩 Notificar verificador: documentos en regla'
+                                          : '📩 Completa documentos para notificar')}
+                                    </button>
+                                    <p style={styles.adminNota}>
+                                      {documentosCompletos
+                                        ? 'Los documentos están en regla. Ya puedes notificar al verificador para continuar el trámite.'
+                                        : 'Carga los documentos faltantes y luego notifica al verificador.'}
+                                    </p>
                                   </div>
                                 </div>
                               </td>

@@ -55,8 +55,10 @@ const styles = {
   acciones: { display: 'flex', gap: '10px', paddingTop: '14px', flexWrap: 'wrap' },
   btnAprobar: { background: '#27ae60', color: '#fff', border: 'none', borderRadius: '6px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer', width: 'auto', minWidth: '190px' },
   btnRechazar: { background: '#e74c3c', color: '#fff', border: 'none', borderRadius: '6px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer', width: 'auto', minWidth: '190px' },
+  btnNotificar: { background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer', width: 'auto', minWidth: '260px' },
   disabled: { background: '#bdc3c7', cursor: 'not-allowed', opacity: 0.7 },
   nota: { background: '#e3f2fd', borderLeft: '4px solid #2196F3', padding: '12px', borderRadius: '4px', marginTop: '16px', color: '#1565c0', fontSize: '13px' },
+  warning: { background: '#fff4e5', borderLeft: '4px solid #f59e0b', padding: '12px', borderRadius: '4px', marginBottom: '10px', color: '#92400e', fontSize: '13px' },
   certificadosSeccion: { background: '#fff', padding: '14px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,.08)', marginBottom: '14px' },
   filtrosCert: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', marginBottom: '10px' },
   inputFiltro: { width: '100%', border: '1px solid #cfd8dc', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', boxSizing: 'border-box' },
@@ -98,6 +100,7 @@ export default function PanelVerificador() {
   const [filtroCertNombre, setFiltroCertNombre] = useState('');
   const [filtroCertTipo, setFiltroCertTipo] = useState('todos');
   const [certificadosExpandido, setCertificadosExpandido] = useState(false);
+  const [enviandoNotificacionAdmin, setEnviandoNotificacionAdmin] = useState(false);
 
   useEffect(() => {
     cargarSolicitudes();
@@ -131,6 +134,52 @@ export default function PanelVerificador() {
     });
   }, [solicitudes, filtroCertRadicado, filtroCertNombre, filtroCertTipo]);
   const esPendienteSeleccionada = selectedSolicitud ? (selectedSolicitud.estado === 'EN_VALIDACION' || selectedSolicitud.estado === 'RADICADO') : false;
+  const documentosAdjuntos = useMemo(() => {
+    if (!selectedSolicitud) return [];
+
+    const tipoCertificado = (selectedSolicitud.tipo_certificado || '').toLowerCase();
+    let claveTercerDocumento = tipoCertificado === 'jac'
+      ? 'residencia'
+      : (tipoCertificado || 'sisben');
+
+    if (!loadingDocumentos && documentStatus && !documentStatus?.[claveTercerDocumento]?.cargado) {
+      const claveDisponible = ['sisben', 'electoral', 'residencia'].find((key) => documentStatus?.[key]?.cargado);
+      if (claveDisponible) {
+        claveTercerDocumento = claveDisponible;
+      }
+    }
+
+    const etiquetaTercerDocumento = claveTercerDocumento === 'residencia'
+      ? (selectedSolicitud.tipo_certificado ? `🎓 Certificado (${selectedSolicitud.tipo_certificado})` : '🎓 Certificado (JAC/Residencia)')
+      : `🎓 Certificado (${(selectedSolicitud.tipo_certificado || claveTercerDocumento).toUpperCase()})`;
+
+    return [
+      { key: 'identidad', label: '📄 Documento de Identidad' },
+      { key: 'solicitud', label: '📄 Documento de Solicitud' },
+      { key: claveTercerDocumento, label: etiquetaTercerDocumento },
+    ];
+  }, [selectedSolicitud, documentStatus, loadingDocumentos]);
+
+  const totalDocumentosMostrados = useMemo(() => {
+    if (!documentStatus || loadingDocumentos || !selectedSolicitud) return 0;
+    return documentosAdjuntos.reduce((acc, doc) => acc + (documentStatus?.[doc.key]?.cargado ? 1 : 0), 0);
+  }, [documentStatus, loadingDocumentos, selectedSolicitud, documentosAdjuntos]);
+
+  const hayDesfaseDocumentos = useMemo(() => {
+    if (!documentStatus || loadingDocumentos || !selectedSolicitud) return false;
+    return (documentStatus.totalDocumentosCargados || 0) > totalDocumentosMostrados;
+  }, [documentStatus, loadingDocumentos, selectedSolicitud, totalDocumentosMostrados]);
+
+  const documentosFaltantes = useMemo(() => {
+    if (!documentStatus || loadingDocumentos || !selectedSolicitud) return [];
+    return documentosAdjuntos.filter((doc) => !documentStatus?.[doc.key]?.cargado).map((doc) => doc.label);
+  }, [documentStatus, loadingDocumentos, selectedSolicitud, documentosAdjuntos]);
+
+  const documentosObligatoriosCompletos = useMemo(() => {
+    if (!documentStatus || loadingDocumentos || !selectedSolicitud) return false;
+    if (!documentosAdjuntos.length) return false;
+    return documentosAdjuntos.every((doc) => !!documentStatus?.[doc.key]?.cargado);
+  }, [documentStatus, loadingDocumentos, selectedSolicitud, documentosAdjuntos]);
 
   const cargarSolicitudes = async () => {
     try {
@@ -210,6 +259,9 @@ export default function PanelVerificador() {
 
   const handleAprobar = async () => {
     if (!selectedSolicitud) return;
+    if (!documentosObligatoriosCompletos) {
+      return alert('❌ No se puede aprobar: faltan documentos obligatorios por cargar.');
+    }
     if (!consecutivo.trim()) return alert('Por favor, registra el consecutivo del verificador');
 
     setProcesando(true);
@@ -243,6 +295,9 @@ export default function PanelVerificador() {
 
   const handleRechazar = async () => {
     if (!selectedSolicitud) return;
+    if (!documentosObligatoriosCompletos) {
+      return alert('❌ No se puede rechazar: faltan documentos obligatorios por cargar.');
+    }
     if (!observaciones.trim()) return alert('Por favor, proporciona una razón para el rechazo');
     if (!consecutivo.trim()) return alert('Por favor, registra el consecutivo del verificador');
 
@@ -272,6 +327,44 @@ export default function PanelVerificador() {
       alert(`❌ Error: ${err.message}`);
     } finally {
       setProcesando(false);
+    }
+  };
+
+  const handleNotificarAdmin = async () => {
+    if (!selectedSolicitud) return;
+    if (loadingDocumentos) {
+      return alert('⏳ Espera a que cargue el estado documental para notificar al administrador.');
+    }
+
+    setEnviandoNotificacionAdmin(true);
+    try {
+      const userGuardado = localStorage.getItem('user');
+      const user = userGuardado ? JSON.parse(userGuardado) : null;
+
+      const mensajeBase = documentosFaltantes.length > 0
+        ? `Se detectan documentos faltantes: ${documentosFaltantes.join(', ')}`
+        : 'Solicito validación de consistencia entre documentos cargados y panel del verificador.';
+
+      const response = await fetch(`${API_TRAMITES_URL}/${selectedSolicitud.id}/notificar-admin-documentos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: user?.username || 'verificador',
+          mensaje: mensajeBase,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(errorBody || 'No se pudo enviar la notificación al administrador');
+      }
+
+      const data = await response.json();
+      alert(`✅ Notificación enviada al administrador (destinatarios: ${data?.enviadoA || 0}).`);
+    } catch (err) {
+      alert(`❌ Error al notificar al administrador: ${err.message}`);
+    } finally {
+      setEnviandoNotificacionAdmin(false);
     }
   };
 
@@ -428,12 +521,18 @@ export default function PanelVerificador() {
 
               <div style={styles.seccion}>
                 <h4 style={styles.h4}>📂 Documentos Adjuntos</h4>
+                {hayDesfaseDocumentos ? (
+                  <div style={styles.warning}>
+                    ⚠️ Se detectó una inconsistencia: hay {documentStatus?.totalDocumentosCargados || 0} documento(s) cargado(s) pero solo se muestran {totalDocumentosMostrados}. Intenta recargar la solicitud y, si persiste, reporta este radicado.
+                  </div>
+                ) : null}
+                {!loadingDocumentos && !documentosObligatoriosCompletos && esPendienteSeleccionada ? (
+                  <div style={styles.warning}>
+                    ⚠️ Faltan documentos obligatorios: {documentosFaltantes.join(', ')}. No podrás aprobar ni rechazar hasta que estén completos.
+                  </div>
+                ) : null}
                 <div style={styles.docs}>
-                  {[
-                    { key: 'identidad', label: '📄 Documento de Identidad' },
-                    { key: 'solicitud', label: '📄 Documento de Solicitud' },
-                    { key: (selectedSolicitud.tipo_certificado?.toLowerCase() || 'sisben'), label: `🎓 Certificado (${selectedSolicitud.tipo_certificado || 'SISBEN'})` },
-                  ].map((doc) => {
+                  {documentosAdjuntos.map((doc) => {
                     const disponible = loadingDocumentos ? false : !!documentStatus?.[doc.key]?.cargado;
                     return (
                       <div key={doc.label} style={styles.docItem}>
@@ -452,6 +551,17 @@ export default function PanelVerificador() {
                     );
                   })}
                 </div>
+                {esPendienteSeleccionada ? (
+                  <div style={{ marginTop: '10px' }}>
+                    <button
+                      style={{ ...styles.btnNotificar, ...(enviandoNotificacionAdmin || loadingDocumentos ? styles.disabled : {}) }}
+                      onClick={handleNotificarAdmin}
+                      disabled={enviandoNotificacionAdmin || loadingDocumentos}
+                    >
+                      {enviandoNotificacionAdmin ? '⏳ Notificando administrador...' : '📩 Notificar al administrador para revisión documental'}
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               <div style={styles.seccion}>
@@ -465,10 +575,10 @@ export default function PanelVerificador() {
                       placeholder={selectedSolicitud.estado === 'RADICADO' ? 'Escribe observaciones si vas a rechazar, o déjalo en blanco para aprobar...' : 'Escribe aquí tus observaciones'}
                     />
                     <div style={styles.acciones}>
-                      <button style={{ ...styles.btnAprobar, ...(isMobile ? { width: '100%', minWidth: 0 } : {}), ...(procesando || observaciones.trim().length > 0 ? styles.disabled : {}) }} onClick={handleAprobar} disabled={procesando || observaciones.trim().length > 0}>
+                      <button style={{ ...styles.btnAprobar, ...(isMobile ? { width: '100%', minWidth: 0 } : {}), ...(procesando || observaciones.trim().length > 0 || !documentosObligatoriosCompletos ? styles.disabled : {}) }} onClick={handleAprobar} disabled={procesando || observaciones.trim().length > 0 || !documentosObligatoriosCompletos}>
                         {procesando ? '⏳ Procesando...' : '✅ Aprobar Solicitud'}
                       </button>
-                      <button style={{ ...styles.btnRechazar, ...(isMobile ? { width: '100%', minWidth: 0 } : {}), ...(procesando || observaciones.trim().length === 0 ? styles.disabled : {}) }} onClick={handleRechazar} disabled={procesando || observaciones.trim().length === 0}>
+                      <button style={{ ...styles.btnRechazar, ...(isMobile ? { width: '100%', minWidth: 0 } : {}), ...(procesando || observaciones.trim().length === 0 || !documentosObligatoriosCompletos ? styles.disabled : {}) }} onClick={handleRechazar} disabled={procesando || observaciones.trim().length === 0 || !documentosObligatoriosCompletos}>
                         {procesando ? '⏳ Procesando...' : '❌ Rechazar Solicitud'}
                       </button>
                     </div>
