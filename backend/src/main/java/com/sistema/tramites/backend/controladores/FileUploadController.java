@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -425,6 +426,18 @@ public class FileUploadController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("❌ Error al notificar administradores: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/drive-diagnostico")
+    public ResponseEntity<?> diagnosticarDrive() {
+        try {
+            Map<String, Object> diagnostics = driveStorageService.getDiagnostics();
+            boolean ok = Boolean.TRUE.equals(diagnostics.get("ok"));
+            return ResponseEntity.status(ok ? HttpStatus.OK : HttpStatus.BAD_REQUEST).body(diagnostics);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Error al diagnosticar Drive: " + e.getMessage());
         }
     }
 
