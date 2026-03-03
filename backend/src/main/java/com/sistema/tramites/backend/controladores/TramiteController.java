@@ -304,7 +304,15 @@ public class TramiteController {
             }
             
             Tramite actualizado = tramiteRepository.save(tramite);
-            return ResponseEntity.ok(actualizado);
+            var respuesta = new java.util.HashMap<String, Object>();
+            respuesta.put("tramiteId", actualizado.getId());
+            respuesta.put("numeroRadicado", actualizado.getNumeroRadicado());
+            respuesta.put("estado", actualizado.getEstado() != null ? actualizado.getEstado().name() : null);
+            respuesta.put("fechaFirmaAlcalde", actualizado.getFechaFirmaAlcalde());
+            respuesta.put("codigoVerificacion", actualizado.getCodigoVerificacion());
+            respuesta.put("mensaje", "✅ Certificado firmado y emitido correctamente");
+
+            return ResponseEntity.ok(respuesta);
             
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
