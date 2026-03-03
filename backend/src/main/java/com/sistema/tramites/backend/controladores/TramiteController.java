@@ -18,6 +18,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.text.Normalizer;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
@@ -295,6 +296,69 @@ public class TramiteController {
         }
     }
 
+    @PostMapping("/{id}/notificar-verificador")
+    public ResponseEntity<?> notificarVerificadorDesdeAdmin(
+            @PathVariable Long id,
+            @RequestBody(required = false) NotificacionVerificadorAdminDTO request,
+            @RequestHeader(value = "X-Admin-Username", required = false) String adminUsername) {
+        try {
+            if (adminUsername == null || adminUsername.isBlank()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body("❌ Debes autenticarte como administrador");
+            }
+
+            Optional<Usuario> adminOpt = usuarioRepository
+                    .findByUsernameAndRolAndActivoTrue(adminUsername.trim(), RolUsuario.ADMINISTRADOR);
+            if (adminOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body("❌ Usuario administrador no válido o inactivo");
+            }
+
+            Optional<Tramite> tramiteOpt = tramiteRepository.findById(id);
+            if (tramiteOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("❌ Trámite no encontrado");
+            }
+
+            Tramite tramite = tramiteOpt.get();
+            List<Usuario> verificadores = usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.VERIFICADOR);
+            List<String> correos = verificadores.stream()
+                    .map(Usuario::getEmail)
+                    .filter(correo -> correo != null && !correo.isBlank())
+                    .distinct()
+                    .toList();
+
+            if (correos.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("❌ No hay verificadores activos con correo configurado");
+            }
+
+            String mensajeAdmin = request != null && request.mensaje != null ? request.mensaje.trim() : "";
+            String detalle = mensajeAdmin.isBlank()
+                    ? "Gestión solicitada por administrador"
+                    : "Gestión solicitada por administrador: " + mensajeAdmin;
+
+            for (String correo : correos) {
+                emailService.enviarNotificacionVerificador(
+                        correo,
+                        tramite.getNumeroRadicado(),
+                        tramite.getNombreSolicitante() + " | " + detalle
+                );
+            }
+
+            var respuesta = new java.util.HashMap<String, Object>();
+            respuesta.put("ok", true);
+            respuesta.put("tramiteId", tramite.getId());
+            respuesta.put("numeroRadicado", tramite.getNumeroRadicado());
+            respuesta.put("notificados", correos.size());
+            respuesta.put("mensaje", "✅ Verificador(es) notificados");
+            return ResponseEntity.ok(respuesta);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Error al notificar verificador: " + e.getMessage());
+        }
+    }
+
     private LocalDate guardadoFechaRadicacion(Tramite tramite) {
         if (tramite.getFechaRadicacion() != null) {
             return tramite.getFechaRadicacion().toLocalDate();
@@ -390,11 +454,20 @@ public class TramiteController {
     }
 
     @GetMapping("/verificacion/{numeroRadicado}")
-    public ResponseEntity<?> verificarCertificado(@PathVariable String numeroRadicado) {
+    public ResponseEntity<?> verificarCertificado(@PathVariable String numeroRadicado,
+                                                  @RequestParam(value = "factorTipo", required = false) String factorTipo,
+                                                  @RequestParam(value = "factorValor", required = false) String factorValor) {
         try {
             String criterio = numeroRadicado == null ? "" : numeroRadicado.trim();
             if (criterio.isBlank()) {
                 return ResponseEntity.badRequest().body("Radicado o código de verificación requerido");
+            }
+
+            String tipo = factorTipo == null ? "" : factorTipo.trim().toUpperCase(Locale.ROOT);
+            String valor = factorValor == null ? "" : factorValor.trim();
+            if (tipo.isBlank() || valor.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Debes enviar el factor de validación (tipo y valor)");
             }
 
             Optional<Tramite> tramite = tramiteRepository.findByNumeroRadicadoIgnoreCase(criterio);
@@ -408,6 +481,11 @@ public class TramiteController {
             }
             
             Tramite t = tramite.get();
+            if (!validarFactorReconocimiento(t, tipo, valor)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("El dato de validación no coincide con el titular de la solicitud");
+                }
+
             String hashActual = calcularHashSha256(t.getContenidoPdfGenerado());
             boolean documentoIntegro = t.getContenidoPdfGenerado() != null
                     && t.getContenidoPdfGenerado().length > 0
@@ -428,6 +506,8 @@ public class TramiteController {
             respuesta.put("documentoIntegro", documentoIntegro);
             respuesta.put("hashRegistrado", t.getHashDocumentoGenerado());
             respuesta.put("hashActual", hashActual);
+            respuesta.put("dobleValidacion", true);
+            respuesta.put("factorValidado", tipo);
             
             // VIGENCIA DEL CERTIFICADO: Solo disponible si está FINALIZADO (firmado por alcalde)
             if (t.getEstado() == EstadoTramite.FINALIZADO) {
@@ -640,6 +720,63 @@ public class TramiteController {
 
     private String valor(String valor) {
         return valor == null ? "" : valor;
+    }
+
+    private String extraerPrimerNombre(String nombreCompleto) {
+        if (nombreCompleto == null) {
+            return "";
+        }
+        String normalizado = nombreCompleto.trim().replaceAll("\\s+", " ");
+        if (normalizado.isBlank()) {
+            return "";
+        }
+        int idx = normalizado.indexOf(' ');
+        return idx > 0 ? normalizado.substring(0, idx) : normalizado;
+    }
+
+    private boolean coincidePrimerNombre(String primerNombreIngresado, String primerNombreRegistrado) {
+        String ingresado = normalizarTextoComparacion(primerNombreIngresado);
+        String registrado = normalizarTextoComparacion(primerNombreRegistrado);
+        if (ingresado.isBlank() || registrado.isBlank()) {
+            return false;
+        }
+        return ingresado.equals(registrado);
+    }
+
+    private boolean validarFactorReconocimiento(Tramite tramite, String tipo, String valorIngresado) {
+        if (tramite == null) {
+            return false;
+        }
+
+        if ("PRIMER_NOMBRE".equals(tipo)) {
+            String primerNombreRegistrado = extraerPrimerNombre(tramite.getNombreSolicitante());
+            return coincidePrimerNombre(valorIngresado, primerNombreRegistrado);
+        }
+
+        if ("ULTIMOS_3_DOCUMENTO".equals(tipo)) {
+            String numeroDoc = tramite.getNumeroDocumento() == null ? "" : tramite.getNumeroDocumento().replaceAll("\\D", "");
+            String valor = valorIngresado.replaceAll("\\D", "");
+            if (numeroDoc.length() < 3 || valor.length() != 3) {
+                return false;
+            }
+            String ultimosTres = numeroDoc.substring(numeroDoc.length() - 3);
+            return ultimosTres.equals(valor);
+        }
+
+        return false;
+    }
+
+    private String normalizarTextoComparacion(String valor) {
+        if (valor == null) {
+            return "";
+        }
+        String sinTildes = Normalizer.normalize(valor, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "");
+        return sinTildes.trim().toUpperCase(Locale.ROOT);
+    }
+
+    public static class NotificacionVerificadorAdminDTO {
+        public String mensaje;
     }
 
     private String generarCodigoVerificacion(String numeroRadicado) {

@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 @RestController
@@ -14,9 +16,15 @@ import java.util.Optional;
 public class FileUploadController {
 
     private final TramiteRepository tramiteRepository;
+    private final UsuarioRepository usuarioRepository;
+    private final EmailService emailService;
 
-    public FileUploadController(TramiteRepository tramiteRepository) {
+    public FileUploadController(TramiteRepository tramiteRepository,
+                                UsuarioRepository usuarioRepository,
+                                EmailService emailService) {
         this.tramiteRepository = tramiteRepository;
+        this.usuarioRepository = usuarioRepository;
+        this.emailService = emailService;
     }
 
     /**
@@ -270,6 +278,8 @@ public class FileUploadController {
                     tramite.getTipoContenidoResidencia(),
                     tramite.getContenidoDocumentoResidencia() != null ? tramite.getContenidoDocumentoResidencia().length : 0
             );
+                // Alias para compatibilidad con el frontend cuando el tipo de certificado es JAC
+                verificacion.jac = verificacion.residencia;
 
             verificacion.tramiteId = tramite.getId();
             verificacion.totalDocumentosCargados = 
@@ -285,6 +295,113 @@ public class FileUploadController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("❌ Error al verificar documentos: " + e.getMessage());
         }
+    }
+
+    @PostMapping("/{id}/notificar-admin-documentos")
+    public ResponseEntity<?> notificarAdminDocumentos(
+            @PathVariable Long id,
+            @RequestBody(required = false) NotificacionAdminRequestDTO request) {
+        try {
+            Optional<Tramite> tramiteOpt = tramiteRepository.findById(id);
+            if (tramiteOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("❌ Trámite no encontrado");
+            }
+
+            Tramite tramite = tramiteOpt.get();
+            List<Usuario> adminsActivos = usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.ADMINISTRADOR);
+            if (adminsActivos.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("❌ No hay administradores activos para notificar");
+            }
+
+            String claveCertificado = resolverClaveCertificado(tramite.getTipo_certificado());
+            boolean identidadCargada = tieneContenido(tramite.getContenidoDocumentoIdentidad());
+            boolean solicitudCargada = tieneContenido(tramite.getContenidoDocumentoSolicitud());
+            boolean certificadoCargado = documentoCertificadoCargado(tramite, claveCertificado);
+
+            List<String> faltantes = new ArrayList<>();
+            if (!identidadCargada) {
+                faltantes.add("Documento de Identidad");
+            }
+            if (!solicitudCargada) {
+                faltantes.add("Documento de Solicitud");
+            }
+            if (!certificadoCargado) {
+                faltantes.add("Certificado " + claveCertificado.toUpperCase());
+            }
+
+            int documentosRequeridos = 3;
+            int documentosCargados = documentosRequeridos - faltantes.size();
+
+            String[] correosAdmin = adminsActivos.stream()
+                    .map(Usuario::getEmail)
+                    .filter(email -> email != null && !email.isBlank())
+                    .distinct()
+                    .toArray(String[]::new);
+
+            if (correosAdmin.length == 0) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("❌ Los administradores activos no tienen correos válidos");
+            }
+
+            String usernameVerificador = (request == null || request.username == null || request.username.isBlank())
+                    ? "verificador"
+                    : request.username.trim();
+
+            String detalleFaltantes = faltantes.isEmpty() ? "NINGUNO" : String.join(", ", faltantes);
+
+            emailService.enviarNotificacionAdminRevisionDocumentos(
+                    correosAdmin,
+                    tramite.getNumeroRadicado(),
+                    tramite.getNombreSolicitante(),
+                    tramite.getTipo_certificado(),
+                    usernameVerificador,
+                    documentosCargados,
+                    documentosRequeridos,
+                    detalleFaltantes,
+                    request != null ? request.mensaje : null
+            );
+
+            var respuesta = new java.util.HashMap<String, Object>();
+            respuesta.put("ok", true);
+            respuesta.put("tramiteId", tramite.getId());
+            respuesta.put("numeroRadicado", tramite.getNumeroRadicado());
+            respuesta.put("enviadoA", correosAdmin.length);
+            respuesta.put("documentosCargados", documentosCargados);
+            respuesta.put("documentosRequeridos", documentosRequeridos);
+            respuesta.put("faltantes", faltantes);
+
+            return ResponseEntity.ok(respuesta);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Error al notificar administradores: " + e.getMessage());
+        }
+    }
+
+    private String resolverClaveCertificado(String tipoCertificado) {
+        String tipo = tipoCertificado == null ? "" : tipoCertificado.trim().toLowerCase();
+        if ("electoral".equals(tipo)) {
+            return "electoral";
+        }
+        if ("jac".equals(tipo)) {
+            return "residencia";
+        }
+        return "sisben";
+    }
+
+    private boolean documentoCertificadoCargado(Tramite tramite, String claveCertificado) {
+        if ("electoral".equalsIgnoreCase(claveCertificado)) {
+            return tieneContenido(tramite.getContenidoCertificadoElectoral());
+        }
+        if ("residencia".equalsIgnoreCase(claveCertificado)) {
+            return tieneContenido(tramite.getContenidoDocumentoResidencia());
+        }
+        return tieneContenido(tramite.getContenidoCertificadoSisben());
+    }
+
+    private boolean tieneContenido(byte[] contenido) {
+        return contenido != null && contenido.length > 0;
     }
 
     /**
@@ -351,6 +468,12 @@ public class FileUploadController {
         public DocumentoStatusDTO sisben;
         public DocumentoStatusDTO electoral;
         public DocumentoStatusDTO residencia;
+        public DocumentoStatusDTO jac;
         public int totalDocumentosCargados;
+    }
+
+    public static class NotificacionAdminRequestDTO {
+        public String username;
+        public String mensaje;
     }
 }

@@ -1,0 +1,123 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Calibri;}{\f1 Courier New;}}
+\viewkind4\uc1\pard\sa240\sl276\slmult1\f0\fs22
+\b Documento de Resumen - Sistema de Tramites\b0\par
+\b Proyecto:\b0 Sistema de Tramites Municipales\par
+\b Fecha:\b0 2 de marzo de 2026\par
+\b Rama de trabajo:\b0 en-pruebas\par
+\par
+\b 1. Alcance trabajado\b0\par
+Durante la sesi\'f3n se implementaron mejoras funcionales, correcciones de flujo documental, fortalecimiento de validaci\'f3n de certificados, ampliaci\'f3n del panel administrativo y recomendaciones comerciales/t\'e9cnicas para despliegue y venta del sistema.\par
+\par
+\b 2. Mejoras funcionales implementadas\b0\par
+\b 2.1 Correcci\'f3n de documentos en Panel Verificador\b0\par
+- Se corrigi\'f3 la inconsistencia donde el panel mostraba menos documentos que los realmente cargados.\par
+- Causa detectada: diferencia de claves entre tipos JAC/Residencia en frontend/backend.\par
+- Resultado: ahora se visualizan correctamente los documentos esperados y se agreg\'f3 validaci\'f3n de desajuste.\par
+\par
+\b 2.2 Bloqueo de aprobaci\'f3n/rechazo por documentos incompletos\b0\par
+- En el panel del verificador se bloquea aprobar/rechazar si faltan documentos obligatorios.\par
+- Se muestra mensaje claro de faltantes.\par
+\par
+\b 2.3 Notificaci\'f3n a administrador desde Verificador\b0\par
+- Se agreg\'f3 acci\'f3n para notificar a administradores activos cuando se requiere revisi\'f3n documental.\par
+- Incluye detalle de faltantes y mensaje contextual.\par
+\par
+\b 2.4 Gesti\'f3n desde Panel Admin\b0\par
+- Se habilit\'f3 gesti\'f3n operativa de solicitudes radicadas desde Admin.\par
+- Acciones agregadas:\par
+  * Ver estado documental por solicitud.\par
+  * Abrir/descargar documentos por tipo.\par
+  * Notificar al verificador desde Admin para retomar gesti\'f3n.\par
+\par
+\b 2.5 Carga de archivos desde Panel Admin\b0\par
+- Se agreg\'f3 funcionalidad para cargar/reemplazar documentos por solicitud directamente desde Admin.\par
+- Luego de cargar, se refresca estado documental autom\'e1ticamente.\par
+- La notificaci\'f3n al verificador queda habilitada cuando los documentos est\'e1n en regla.\par
+\par
+\b 2.6 Etiquetas visuales de faltantes\b0\par
+- En tabla y detalle del panel admin se muestra:\par
+  * "Faltan X documento(s)"\par
+  * "Documentos en regla"\par
+  * Listado expl\'edcito de documentos faltantes\par
+\par
+\b 2.7 Verificaci\'f3n de certificado con doble factor\b0\par
+- Se implement\'f3 doble validaci\'f3n adem\'e1s del radicado/c\'f3digo.\par
+- Evoluci\'f3n aplicada:\par
+  * Primer paso: validaci\'f3n por primer nombre.\par
+  * Versi\'f3n final: reto aleatorio (primer nombre o \"ultimos 3 del documento\").\par
+- Se elimin\'f3 la elecci\'f3n manual del reto por parte del usuario en UI.\par
+\par
+\b 3. Ajustes de estructura del proyecto\b0\par
+- Se reorganizaron controladores en carpeta dedicada: \f1 backend/src/main/java/com/sistema/tramites/backend/controladores\f0\par
+- Archivos movidos: AuthController, TramiteController, FileUploadController, GlobalExceptionHandler.\par
+- Se valid\'f3 compilaci\'f3n posterior a la reorganizaci\'f3n.\par
+\par
+\b 4. Validaciones y verificaciones realizadas\b0\par
+- Revisi\'f3n de errores de archivos modificados: sin errores relevantes pendientes en cambios aplicados.\par
+- Compilaci\'f3n backend: validada en distintos momentos con \f1 mvnw -DskipTests compile\f0.\par
+- Build frontend: validado repetidamente con \f1 npm run build\f0.\par
+- Pruebas de endpoints clave: notificaci\'f3n admin/verificador y verificaci\'f3n de certificado.\par
+\par
+\b 5. Recomendaciones de ejecuci\'f3n (local vs nube)\b0\par
+\b Local\b0\par
+- Recomendado para desarrollo, pruebas y demos internas.\par
+- Menor costo inicial, mayor dependencia operativa manual.\par
+\par
+\b Nube\b0\par
+- Recomendado para producci\'f3n y venta institucional.\par
+- Ventajas: disponibilidad, seguridad, backups, monitoreo, escalabilidad y acceso remoto estable.\par
+\par
+\b 6. Servicios cr\'edticos para salida a producci\'f3n\b0\par
+1) Dominio y DNS\par
+2) Hosting backend Java\par
+3) Hosting frontend\par
+4) MySQL administrado\par
+5) Correo transaccional\par
+6) SSL/TLS\par
+\par
+\b 7. Estimaciones comerciales discutidas\b0\par
+\b 7.1 Volumen de referencia\b0\par
+- 6.000 solicitudes por a\'f1o: volumen bajo-medio, viable con arquitectura ligera bien administrada.\par
+\par
+\b 7.2 Costos cr\'edticos estimados\b0\par
+- Rango mensual recomendado: aproximadamente COP 1.2M a 2.4M (dependiendo proveedor/SKU/seguridad).\par
+\par
+\b 7.3 Opciones de referencia para oferta\b0\par
+\b Opcion Economica\b0\par
+- Infra mensual estimada: COP 875.000\par
+- Infra anual estimada: COP 10.500.000\par
+- Setup unico sugerido: COP 12.000.000\par
+\par
+\b Opcion Recomendada\b0\par
+- Infra mensual estimada: COP 2.050.000\par
+- Infra anual estimada: COP 24.600.000\par
+- Setup unico sugerido: COP 20.000.000\par
+\par
+\b 7.4 Que es el setup unico\b0\par
+- Es el costo inicial (una sola vez) para dejar el sistema listo en produccion:\par
+  * Despliegue inicial\par
+  * Configuracion de servicios\par
+  * Parametrizacion\par
+  * Pruebas de salida\par
+  * Capacitacion inicial\par
+\par
+\b 8. Modelo de venta sin mensualidades (aclarado)\b0\par
+- Posible vender en pago unico + entrega en nube del cliente.\par
+- Recomendacion contractual: dejar dominio, DNS y cuenta cloud a nombre del cliente desde el dia 1.\par
+- Tu cobro: licencia/implementacion/setup.\par
+- El cliente asume costos recurrentes cloud directamente con el proveedor.\par
+\par
+\b 9. Riesgos principales identificados\b0\par
+- Cumplimiento de datos personales y trazabilidad documental.\par
+- Continuidad operativa (caidas, envios de correo, recuperacion de respaldo).\par
+- Riesgo comercial por ciclos largos de adquisicion institucional.\par
+\par
+\b 10. Proximos pasos sugeridos\b0\par
+1) Definir paquete comercial final (economico/recomendado/premium).\par
+2) Formalizar propuesta con alcance, exclusiones, SLA y garantia.\par
+3) Preparar despliegue en nube objetivo (idealmente cuenta del cliente).\par
+4) Cerrar checklist de seguridad y cumplimiento documental.\par
+\par
+\b Fin del documento\b0\par
+}

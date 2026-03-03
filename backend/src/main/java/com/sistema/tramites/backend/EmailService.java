@@ -118,6 +118,51 @@ public class EmailService {
         }
     }
 
+    public void enviarNotificacionAdminRevisionDocumentos(
+            String[] correosAdmin,
+            String numeroRadicado,
+            String nombreSolicitante,
+            String tipoCertificado,
+            String verificadorUsername,
+            int documentosCargados,
+            int documentosRequeridos,
+            String detalleFaltantes,
+            String mensajeAdicional) {
+        try {
+            if (correosAdmin == null || correosAdmin.length == 0) {
+                logger.warn("⚠️ No hay correos de administrador para notificación de revisión documental");
+                return;
+            }
+
+            logger.info("📧 Enviando notificación de revisión documental a admins: {}", String.join(",", correosAdmin));
+            SimpleMailMessage mensaje = new SimpleMailMessage();
+            mensaje.setTo(correosAdmin);
+            mensaje.setFrom(emailRemitente);
+            mensaje.setSubject("Solicitud de revisión documental - " + numeroRadicado);
+
+            String contenido = "El verificador ha solicitado apoyo de administración para revisar documentos cargados.\n\n"
+                    + "Radicado: " + numeroRadicado + "\n"
+                    + "Solicitante: " + nombreSolicitante + "\n"
+                    + "Tipo de certificado: " + (tipoCertificado == null || tipoCertificado.isBlank() ? "NO ESPECIFICADO" : tipoCertificado) + "\n"
+                    + "Verificador: " + (verificadorUsername == null || verificadorUsername.isBlank() ? "verificador" : verificadorUsername) + "\n"
+                    + "Documentos cargados: " + documentosCargados + " de " + documentosRequeridos + "\n"
+                    + "Faltantes detectados: " + (detalleFaltantes == null || detalleFaltantes.isBlank() ? "NINGUNO" : detalleFaltantes) + "\n";
+
+            if (mensajeAdicional != null && !mensajeAdicional.isBlank()) {
+                contenido += "\nMensaje del verificador: " + mensajeAdicional + "\n";
+            }
+
+            contenido += "\nPor favor ingresa al sistema y valida el estado de la documentación.\n\n"
+                    + "Ventanilla Virtual";
+
+            mensaje.setText(contenido);
+            mailSender.send(mensaje);
+            logger.info("✅ Notificación de revisión documental enviada a administradores");
+        } catch (Exception e) {
+            logger.error("❌ Error al enviar notificación a administradores: {}", e.getMessage(), e);
+        }
+    }
+
     /**
      * Envía email con documento final (aprobado o rechazado)
      */
