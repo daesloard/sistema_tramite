@@ -171,7 +171,17 @@ const getEstadoBadge = (estado) => {
 const formatearFecha = (valor) => {
   if (!valor) return 'Sin fecha';
   const fecha = new Date(valor);
-  return Number.isNaN(fecha.getTime()) ? 'Sin fecha' : fecha.toLocaleDateString('es-CO');
+  if (Number.isNaN(fecha.getTime())) return 'Sin fecha';
+  const esSoloFecha = typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor);
+  return esSoloFecha
+    ? fecha.toLocaleDateString('es-CO')
+    : fecha.toLocaleString('es-CO', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
 };
 
 export default function PanelAlcalde() {

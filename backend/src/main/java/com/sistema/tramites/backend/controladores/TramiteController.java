@@ -132,6 +132,11 @@ public class TramiteController {
             tramite.setTelefono(solicitud.getTelefono());
             tramite.setCorreoElectronico(normalizarCorreo(solicitud.getCorreoElectronico()));
             tramite.setTipo_certificado(solicitud.getTipo_certificado());
+
+            String driveFolderId = null;
+            if (driveStorageService.isEnabled()) {
+                driveFolderId = obtenerOCrearCarpetaDrive(tramite);
+            }
             
                 // Guardar documentos en BLOB si se envían
                 if (solicitud.getDocumento_identidad_base64() != null && !solicitud.getDocumento_identidad_base64().isEmpty()) {
@@ -153,7 +158,7 @@ public class TramiteController {
                     : "application/pdf");
 
                 if (driveStorageService.isEnabled()) {
-                    String driveId = driveStorageService.uploadFile(nombreFinalIdentidad, tipoFinalIdentidad, documentoIdentidad);
+                    String driveId = driveStorageService.uploadFileToFolder(nombreFinalIdentidad, tipoFinalIdentidad, documentoIdentidad, driveFolderId);
                     tramite.setRuta_documento_identidad(DRIVE_PREFIX + driveId);
                     tramite.setContenidoDocumentoIdentidad(null);
                 } else {
@@ -180,7 +185,7 @@ public class TramiteController {
                     : "application/pdf");
 
                 if (driveStorageService.isEnabled()) {
-                    String driveId = driveStorageService.uploadFile(nombreFinalSolicitud, tipoFinalSolicitud, documentoSolicitud);
+                    String driveId = driveStorageService.uploadFileToFolder(nombreFinalSolicitud, tipoFinalSolicitud, documentoSolicitud, driveFolderId);
                     tramite.setRuta_documento_solicitud(DRIVE_PREFIX + driveId);
                     tramite.setContenidoDocumentoSolicitud(null);
                 } else {
@@ -202,7 +207,7 @@ public class TramiteController {
 
                 String driveIdCertificado = null;
                 if (driveStorageService.isEnabled()) {
-                    driveIdCertificado = driveStorageService.uploadFile(nombreFinal, tipoFinal, certificado);
+                    driveIdCertificado = driveStorageService.uploadFileToFolder(nombreFinal, tipoFinal, certificado, driveFolderId);
                 }
 
                 // Respaldo genérico: garantiza disponibilidad del 3er adjunto en correo de radicación
@@ -340,7 +345,7 @@ public class TramiteController {
                 tramite.setFechaVigencia(workingDayCalculator.calcularFechaVigencia(inicioVigencia));
             } else {
                 tramite.setEstado(EstadoTramite.RECHAZADO);
-                tramite.setFechaVerificacion(null);
+                tramite.setFechaVerificacion(LocalDateTime.now());
                 if (tramite.getCodigoVerificacion() == null || tramite.getCodigoVerificacion().isBlank()) {
                     tramite.setCodigoVerificacion(generarCodigoVerificacion(tramite.getNumeroRadicado()));
                 }
@@ -853,6 +858,24 @@ public class TramiteController {
         }
         String normalizado = correo.trim().toLowerCase(Locale.ROOT);
         return normalizado.isBlank() ? null : normalizado;
+    }
+
+    private String obtenerOCrearCarpetaDrive(Tramite tramite) throws IOException {
+        if (tramite.getDriveFolderId() != null && !tramite.getDriveFolderId().isBlank()) {
+            return tramite.getDriveFolderId();
+        }
+
+        int anio = (tramite.getFechaRadicacion() != null)
+                ? tramite.getFechaRadicacion().getYear()
+                : Year.now().getValue();
+
+        String baseIdentificacion = (tramite.getNumeroDocumento() != null && !tramite.getNumeroDocumento().isBlank())
+                ? tramite.getNumeroDocumento()
+                : (tramite.getNumeroRadicado() != null ? tramite.getNumeroRadicado() : "solicitud");
+
+        String folderId = driveStorageService.createSolicitudFolderByDocumento(baseIdentificacion, anio);
+        tramite.setDriveFolderId(folderId);
+        return folderId;
     }
 
     private boolean consecutivoYaUsadoEnAnio(String consecutivo, int anio, Long tramiteActualId) {

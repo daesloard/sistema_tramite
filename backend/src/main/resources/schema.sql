@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS tramites (
     ruta_certificado_sisben VARCHAR(500),
     ruta_certificado_electoral VARCHAR(500),
     ruta_certificado_final VARCHAR(500),
+    drive_folder_id VARCHAR(255),
     
     -- Fechas
     fecha_radicacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

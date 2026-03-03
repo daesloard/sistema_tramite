@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -120,7 +121,8 @@ public class FileUploadController {
             byte[] contenido = file.getBytes();
             String driveId = null;
             if (driveStorageService.isEnabled()) {
-                driveId = driveStorageService.uploadFile(file.getOriginalFilename(), contentType, contenido);
+                String driveFolderId = obtenerOCrearCarpetaDrive(tramite);
+                driveId = driveStorageService.uploadFileToFolder(file.getOriginalFilename(), contentType, contenido, driveFolderId);
             }
 
             switch (tipo.toLowerCase()) {
@@ -268,48 +270,65 @@ public class FileUploadController {
             VerificacionDocumentosDTO verificacion = new VerificacionDocumentosDTO();
 
             // Verificar Identidad
+                String rutaIdentidad = tramite.getRuta_documento_identidad();
             verificacion.identidad = new DocumentoStatusDTO(
-                    tieneContenidoOStorage(tramite.getContenidoDocumentoIdentidad(), tramite.getRuta_documento_identidad()),
+                    tieneContenidoOStorage(tramite.getContenidoDocumentoIdentidad(), rutaIdentidad),
                     tramite.getNombreArchivoIdentidad(),
                     tramite.getTipoContenidoIdentidad(),
-                    tramite.getContenidoDocumentoIdentidad() != null ? tramite.getContenidoDocumentoIdentidad().length : 0
+                    tramite.getContenidoDocumentoIdentidad() != null ? tramite.getContenidoDocumentoIdentidad().length : 0,
+                    resolverAlmacenamiento(tramite.getContenidoDocumentoIdentidad(), rutaIdentidad),
+                    extraerDriveFileId(rutaIdentidad)
             );
 
             // Verificar Solicitud
+                String rutaSolicitud = tramite.getRuta_documento_solicitud();
             verificacion.solicitud = new DocumentoStatusDTO(
-                    tieneContenidoOStorage(tramite.getContenidoDocumentoSolicitud(), tramite.getRuta_documento_solicitud()),
+                    tieneContenidoOStorage(tramite.getContenidoDocumentoSolicitud(), rutaSolicitud),
                     tramite.getNombreArchivoSolicitud(),
                     tramite.getTipoContenidoSolicitud(),
-                    tramite.getContenidoDocumentoSolicitud() != null ? tramite.getContenidoDocumentoSolicitud().length : 0
+                    tramite.getContenidoDocumentoSolicitud() != null ? tramite.getContenidoDocumentoSolicitud().length : 0,
+                    resolverAlmacenamiento(tramite.getContenidoDocumentoSolicitud(), rutaSolicitud),
+                    extraerDriveFileId(rutaSolicitud)
             );
 
             // Verificar SISBEN
+                String rutaSisben = tramite.getRuta_certificado_sisben();
             verificacion.sisben = new DocumentoStatusDTO(
-                    tieneContenidoOStorage(tramite.getContenidoCertificadoSisben(), tramite.getRuta_certificado_sisben()),
+                    tieneContenidoOStorage(tramite.getContenidoCertificadoSisben(), rutaSisben),
                     tramite.getNombreArchivoSisben(),
                     tramite.getTipoContenidoSisben(),
-                    tramite.getContenidoCertificadoSisben() != null ? tramite.getContenidoCertificadoSisben().length : 0
+                    tramite.getContenidoCertificadoSisben() != null ? tramite.getContenidoCertificadoSisben().length : 0,
+                    resolverAlmacenamiento(tramite.getContenidoCertificadoSisben(), rutaSisben),
+                    extraerDriveFileId(rutaSisben)
             );
 
             // Verificar Electoral
+                String rutaElectoral = tramite.getRuta_certificado_electoral();
             verificacion.electoral = new DocumentoStatusDTO(
-                    tieneContenidoOStorage(tramite.getContenidoCertificadoElectoral(), tramite.getRuta_certificado_electoral()),
+                    tieneContenidoOStorage(tramite.getContenidoCertificadoElectoral(), rutaElectoral),
                     tramite.getNombreArchivoElectoral(),
                     tramite.getTipoContenidoElectoral(),
-                    tramite.getContenidoCertificadoElectoral() != null ? tramite.getContenidoCertificadoElectoral().length : 0
+                    tramite.getContenidoCertificadoElectoral() != null ? tramite.getContenidoCertificadoElectoral().length : 0,
+                    resolverAlmacenamiento(tramite.getContenidoCertificadoElectoral(), rutaElectoral),
+                    extraerDriveFileId(rutaElectoral)
             );
 
             // Verificar Residencia
+                String rutaResidencia = tramite.getRuta_certificado();
             verificacion.residencia = new DocumentoStatusDTO(
-                    tieneContenidoOStorage(tramite.getContenidoDocumentoResidencia(), tramite.getRuta_certificado()),
+                    tieneContenidoOStorage(tramite.getContenidoDocumentoResidencia(), rutaResidencia),
                     tramite.getNombreArchivoResidencia(),
                     tramite.getTipoContenidoResidencia(),
-                    tramite.getContenidoDocumentoResidencia() != null ? tramite.getContenidoDocumentoResidencia().length : 0
+                    tramite.getContenidoDocumentoResidencia() != null ? tramite.getContenidoDocumentoResidencia().length : 0,
+                    resolverAlmacenamiento(tramite.getContenidoDocumentoResidencia(), rutaResidencia),
+                    extraerDriveFileId(rutaResidencia)
             );
                 // Alias para compatibilidad con el frontend cuando el tipo de certificado es JAC
                 verificacion.jac = verificacion.residencia;
 
             verificacion.tramiteId = tramite.getId();
+            verificacion.driveHabilitado = driveStorageService.isEnabled();
+            verificacion.driveFolderId = tramite.getDriveFolderId();
                 String claveCertificado = resolverClaveCertificado(tramite.getTipo_certificado());
                 verificacion.totalDocumentosCargados =
                     (tieneContenidoOStorage(tramite.getContenidoDocumentoIdentidad(), tramite.getRuta_documento_identidad()) ? 1 : 0) +
@@ -435,6 +454,16 @@ public class FileUploadController {
         return tieneContenido(contenido) || extraerDriveFileId(ruta) != null;
     }
 
+    private String resolverAlmacenamiento(byte[] contenido, String ruta) {
+        if (extraerDriveFileId(ruta) != null) {
+            return "DRIVE";
+        }
+        if (tieneContenido(contenido)) {
+            return "BD";
+        }
+        return "NINGUNO";
+    }
+
     private String extraerDriveFileId(String ruta) {
         if (ruta == null) {
             return null;
@@ -444,6 +473,25 @@ public class FileUploadController {
             return valor.substring(DRIVE_PREFIX.length());
         }
         return null;
+    }
+
+    private String obtenerOCrearCarpetaDrive(Tramite tramite) throws IOException {
+        if (tramite.getDriveFolderId() != null && !tramite.getDriveFolderId().isBlank()) {
+            return tramite.getDriveFolderId();
+        }
+
+        int anio = (tramite.getFechaRadicacion() != null)
+                ? tramite.getFechaRadicacion().getYear()
+                : Year.now().getValue();
+
+        String baseIdentificacion = (tramite.getNumeroDocumento() != null && !tramite.getNumeroDocumento().isBlank())
+                ? tramite.getNumeroDocumento()
+                : (tramite.getNumeroRadicado() != null ? tramite.getNumeroRadicado() : "solicitud");
+
+        String folderId = driveStorageService.createSolicitudFolderByDocumento(baseIdentificacion, anio);
+        tramite.setDriveFolderId(folderId);
+        tramiteRepository.save(tramite);
+        return folderId;
     }
 
     /**
@@ -491,12 +539,16 @@ public class FileUploadController {
         public String nombreArchivo;
         public String tipoContenido;
         public long tamañoBytes;
+        public String almacenamiento;
+        public String driveFileId;
 
-        public DocumentoStatusDTO(boolean cargado, String nombreArchivo, String tipoContenido, long tamañoBytes) {
+        public DocumentoStatusDTO(boolean cargado, String nombreArchivo, String tipoContenido, long tamañoBytes, String almacenamiento, String driveFileId) {
             this.cargado = cargado;
             this.nombreArchivo = nombreArchivo;
             this.tipoContenido = tipoContenido;
             this.tamañoBytes = tamañoBytes;
+            this.almacenamiento = almacenamiento;
+            this.driveFileId = driveFileId;
         }
     }
 
@@ -512,6 +564,8 @@ public class FileUploadController {
         public DocumentoStatusDTO residencia;
         public DocumentoStatusDTO jac;
         public int totalDocumentosCargados;
+        public boolean driveHabilitado;
+        public String driveFolderId;
     }
 
     public static class NotificacionAdminRequestDTO {
