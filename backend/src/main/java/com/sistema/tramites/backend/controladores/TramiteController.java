@@ -19,6 +19,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Year;
 import java.time.format.DateTimeFormatter;
 import java.text.Normalizer;
 import java.util.Base64;
@@ -124,7 +125,7 @@ public class TramiteController {
             tramite.setDireccionResidencia(solicitud.getDireccionResidencia());
             tramite.setBarrioResidencia(solicitud.getBarrioResidencia());
             tramite.setTelefono(solicitud.getTelefono());
-            tramite.setCorreoElectronico(solicitud.getCorreoElectronico());
+            tramite.setCorreoElectronico(normalizarCorreo(solicitud.getCorreoElectronico()));
             tramite.setTipo_certificado(solicitud.getTipo_certificado());
             
                 // Guardar documentos en BLOB si se envían
@@ -208,7 +209,7 @@ public class TramiteController {
             
             // Enviar emails
             emailService.enviarConfirmacionRadicacion(
-                    solicitud.getCorreoElectronico(),
+                    guardado.getCorreoElectronico(),
                     solicitud.getNombre(),
                     guardado.getNumeroRadicado(),
                     fechaVencimiento,
@@ -261,8 +262,21 @@ public class TramiteController {
                 tramite.setUsuarioVerificador(usuarioVerificadorOpt.get());
             }
 
-            if (verificacion.getConsecutivo() != null && !verificacion.getConsecutivo().isBlank()) {
-                tramite.setConsecutivoVerificador(verificacion.getConsecutivo().trim());
+            int anioConsecutivo = Year.now().getValue();
+            String consecutivoIngresado = verificacion.getConsecutivo() == null ? "" : verificacion.getConsecutivo().trim();
+            if (!consecutivoIngresado.isBlank()) {
+                String consecutivoNormalizado = normalizarConsecutivo(consecutivoIngresado);
+                if (consecutivoNormalizado == null) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body("Consecutivo inválido. Debe contener solo números (ej: 001)");
+                }
+                if (consecutivoYaUsadoEnAnio(consecutivoNormalizado, anioConsecutivo, tramite.getId())) {
+                    return ResponseEntity.status(HttpStatus.CONFLICT)
+                            .body("El consecutivo " + consecutivoNormalizado + " ya fue usado en " + anioConsecutivo);
+                }
+                tramite.setConsecutivoVerificador(consecutivoNormalizado);
+            } else if (tramite.getConsecutivoVerificador() == null || tramite.getConsecutivoVerificador().isBlank()) {
+                tramite.setConsecutivoVerificador(generarSiguienteConsecutivo(anioConsecutivo));
             }
             
             if (verificacion.isAprobado()) {
@@ -748,6 +762,69 @@ public class TramiteController {
     private boolean validarFactorReconocimiento(Tramite tramite, String tipo, String valorIngresado) {
         if (tramite == null) {
             return false;
+        }
+
+        private String normalizarCorreo(String correo) {
+            if (correo == null) {
+                return null;
+            }
+            String normalizado = correo.trim().toLowerCase(Locale.ROOT);
+            return normalizado.isBlank() ? null : normalizado;
+        }
+
+        private boolean consecutivoYaUsadoEnAnio(String consecutivo, int anio, Long tramiteActualId) {
+            LocalDateTime inicio = LocalDate.of(anio, 1, 1).atStartOfDay();
+            LocalDateTime fin = LocalDate.of(anio + 1, 1, 1).atStartOfDay();
+
+            return tramiteRepository.findAllByFechaRadicacionBetweenAndConsecutivoVerificadorIsNotNull(inicio, fin).stream()
+                    .filter(t -> tramiteActualId == null || !Objects.equals(t.getId(), tramiteActualId))
+                    .map(Tramite::getConsecutivoVerificador)
+                    .map(this::normalizarConsecutivo)
+                    .filter(Objects::nonNull)
+                    .anyMatch(consecutivo::equals);
+        }
+
+        private String generarSiguienteConsecutivo(int anio) {
+            LocalDateTime inicio = LocalDate.of(anio, 1, 1).atStartOfDay();
+            LocalDateTime fin = LocalDate.of(anio + 1, 1, 1).atStartOfDay();
+
+            int maximo = tramiteRepository.findAllByFechaRadicacionBetweenAndConsecutivoVerificadorIsNotNull(inicio, fin).stream()
+                    .map(Tramite::getConsecutivoVerificador)
+                    .map(this::normalizarConsecutivo)
+                    .filter(Objects::nonNull)
+                    .mapToInt(Integer::parseInt)
+                    .max()
+                    .orElse(0);
+
+            return String.format("%03d", maximo + 1);
+        }
+
+        private String normalizarConsecutivo(String valor) {
+            if (valor == null) {
+                return null;
+            }
+
+            String soloNumeros = valor.trim().replaceAll("\\D", "");
+            if (soloNumeros.isBlank()) {
+                return null;
+            }
+
+            int numero;
+            try {
+                numero = Integer.parseInt(soloNumeros);
+            } catch (NumberFormatException ex) {
+                return null;
+            }
+
+            if (numero <= 0) {
+                return null;
+            }
+
+            if (numero > 999999) {
+                return null;
+            }
+
+            return String.format("%03d", numero);
         }
 
         if ("PRIMER_NOMBRE".equals(tipo)) {

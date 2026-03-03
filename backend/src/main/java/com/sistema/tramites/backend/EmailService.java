@@ -12,15 +12,21 @@ import org.slf4j.LoggerFactory;
 import jakarta.mail.internet.MimeMessage;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
 
 @Service
 public class EmailService {
 
     private final JavaMailSender mailSender;
     private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
+    private static final String EMAIL_SISTEMAS_TEMPORAL = "sistemas@cabuyaro-meta.gov.co";
+    private static final long MAX_ADJUNTO_RESULTADO_BYTES = 8L * 1024L * 1024L;
     
-    @Value("${spring.mail.username}")
+    @Value("${app.mail.from:sistemas@cabuyaro-meta.gov.co}")
     private String emailRemitente;
+
+    @Value("${app.mail.attachments.on-radicacion:false}")
+    private boolean adjuntarSoportesEnRadicacion;
 
     @Autowired
     public EmailService(JavaMailSender mailSender) {
@@ -39,11 +45,17 @@ public class EmailService {
                                              String numeroRadicado, LocalDate fechaVencimiento,
                                              Tramite tramite) {
         try {
-            logger.info("📧 Enviando email de confirmación a: {}", correoDestino);
+            String destino = normalizarCorreo(correoDestino);
+            if (destino.isBlank()) {
+                logger.warn("⚠️ Se omitió envío de confirmación: correo destino vacío. Radicado={}", numeroRadicado);
+                return;
+            }
+
+            logger.info("📧 Enviando email de confirmación a: {}", destino);
             MimeMessage mimeMessage = mailSender.createMimeMessage();
             MimeMessageHelper mensaje = new MimeMessageHelper(mimeMessage, true, "UTF-8");
-            mensaje.setTo(correoDestino);
-            mensaje.setFrom(emailRemitente);
+            mensaje.setTo(destino);
+            mensaje.setFrom(Objects.requireNonNull(obtenerRemitente()));
             mensaje.setSubject("Confirmación de Radicación - Solicitud de Certificado de Residencia");
             
             String fechaFormato = fechaVencimiento.format(DateTimeFormatter.ofPattern("dd 'de' MMMM 'de' yyyy"));
@@ -62,7 +74,7 @@ public class EmailService {
 
                     mensaje.setText(contenido);
 
-                    if (tramite != null) {
+                    if (adjuntarSoportesEnRadicacion && tramite != null) {
                     adjuntarSiExiste(mensaje,
                         tramite.getContenidoDocumentoSolicitud(),
                         tramite.getNombreArchivoSolicitud(),
@@ -82,7 +94,7 @@ public class EmailService {
                     }
 
                     mailSender.send(mimeMessage);
-            logger.info("✅ Email de confirmación enviado exitosamente a: {}", correoDestino);
+            logger.info("✅ Email de confirmación enviado exitosamente a: {}", destino);
             
         } catch (Exception e) {
             logger.error("❌ Error al enviar email de confirmación: {}", e.getMessage(), e);
@@ -95,10 +107,16 @@ public class EmailService {
     public void enviarNotificacionVerificador(String correoVerificador, String numeroRadicado, 
                                               String nombreSolicitante) {
         try {
-            logger.info("📧 Enviando notificación de verificación a: {}", correoVerificador);
+            String destino = normalizarCorreo(correoVerificador);
+            if (destino.isBlank()) {
+                logger.warn("⚠️ Se omitió notificación al verificador: correo vacío. Radicado={}", numeroRadicado);
+                return;
+            }
+
+            logger.info("📧 Enviando notificación de verificación a: {}", destino);
             SimpleMailMessage mensaje = new SimpleMailMessage();
-            mensaje.setTo(correoVerificador);
-            mensaje.setFrom(emailRemitente);
+            mensaje.setTo(destino);
+            mensaje.setFrom(Objects.requireNonNull(obtenerRemitente()));
             mensaje.setSubject("Nueva Solicitud de Verificación - " + numeroRadicado);
             
             String contenido = "Nueva solicitud de verificación:\n\n" +
@@ -111,7 +129,7 @@ public class EmailService {
             
             mensaje.setText(contenido);
             mailSender.send(mensaje);
-            logger.info("✅ Notificación de verificación enviada a: {}", correoVerificador);
+            logger.info("✅ Notificación de verificación enviada a: {}", destino);
             
         } catch (Exception e) {
             logger.error("❌ Error al enviar email de verificador: {}", e.getMessage(), e);
@@ -137,7 +155,7 @@ public class EmailService {
             logger.info("📧 Enviando notificación de revisión documental a admins: {}", String.join(",", correosAdmin));
             SimpleMailMessage mensaje = new SimpleMailMessage();
             mensaje.setTo(correosAdmin);
-            mensaje.setFrom(emailRemitente);
+            mensaje.setFrom(Objects.requireNonNull(obtenerRemitente()));
             mensaje.setSubject("Solicitud de revisión documental - " + numeroRadicado);
 
             String contenido = "El verificador ha solicitado apoyo de administración para revisar documentos cargados.\n\n"
@@ -175,13 +193,19 @@ public class EmailService {
                                      boolean aprobado, String observaciones,
                                      byte[] adjuntoPdf, String nombreAdjunto) {
         try {
+            String destino = normalizarCorreo(correoDestino);
+            if (destino.isBlank()) {
+                logger.warn("⚠️ Se omitió envío de resultado: correo destino vacío. Radicado={}", numeroRadicado);
+                return;
+            }
+
             String estado = aprobado ? "APROBADO" : "RECHAZADO";
-            logger.info("📧 Enviando email de resultado ({}) a: {}", estado, correoDestino);
+            logger.info("📧 Enviando email de resultado ({}) a: {}", estado, destino);
             MimeMessage mimeMessage = mailSender.createMimeMessage();
             MimeMessageHelper mensaje = new MimeMessageHelper(mimeMessage, true, "UTF-8");
 
-            mensaje.setTo(correoDestino);
-            mensaje.setFrom(emailRemitente);
+            mensaje.setTo(destino);
+            mensaje.setFrom(Objects.requireNonNull(obtenerRemitente()));
             
             String asunto = "Resultado de tu Solicitud - " + estado + " - " + numeroRadicado;
             
@@ -202,19 +226,33 @@ public class EmailService {
             
             mensaje.setText(contenido);
 
-            if (adjuntoPdf != null && adjuntoPdf.length > 0) {
+            if (adjuntoPdf != null && adjuntoPdf.length > 0 && adjuntoPdf.length <= MAX_ADJUNTO_RESULTADO_BYTES) {
                 String nombreArchivoAdjunto = (nombreAdjunto != null && !nombreAdjunto.isBlank())
                         ? nombreAdjunto
                         : "respuesta_solicitud_" + numeroRadicado + ".pdf";
                 mensaje.addAttachment(nombreArchivoAdjunto, new ByteArrayResource(adjuntoPdf), "application/pdf");
+            } else if (adjuntoPdf != null && adjuntoPdf.length > MAX_ADJUNTO_RESULTADO_BYTES) {
+                logger.warn("⚠️ PDF final no adjunto por tamaño ({}) para radicado={}", adjuntoPdf.length, numeroRadicado);
             }
 
             mailSender.send(mimeMessage);
-            logger.info("✅ Email de resultado ({}) enviado a: {}", estado, correoDestino);
+            logger.info("✅ Email de resultado ({}) enviado a: {}", estado, destino);
             
         } catch (Exception e) {
             logger.error("❌ Error al enviar email de resultado: {}", e.getMessage(), e);
         }
+    }
+
+    private String obtenerRemitente() {
+        String remitente = emailRemitente == null ? "" : emailRemitente.trim();
+        return remitente.isBlank() ? EMAIL_SISTEMAS_TEMPORAL : remitente;
+    }
+
+    private String normalizarCorreo(String correo) {
+        if (correo == null) {
+            return "";
+        }
+        return correo.trim().toLowerCase();
     }
 
     private void adjuntarSiExiste(MimeMessageHelper mensaje,
@@ -234,7 +272,7 @@ public class EmailService {
                 ? tipoContenido
                 : "application/octet-stream";
 
-        mensaje.addAttachment(nombreFinal, new ByteArrayResource(contenido), tipoFinal);
+            mensaje.addAttachment(Objects.requireNonNull(nombreFinal), new ByteArrayResource(contenido), Objects.requireNonNull(tipoFinal));
     }
 
     private boolean adjuntarCertificadoSoporte(MimeMessageHelper mensaje, Tramite tramite) throws Exception {

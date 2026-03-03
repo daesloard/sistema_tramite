@@ -12,6 +12,8 @@ import java.util.Properties;
 @EnableConfigurationProperties
 public class MailSenderConfig {
 
+    private static final String EMAIL_SISTEMAS_TEMPORAL = "sistemas@cabuyaro-meta.gov.co";
+
     @Value("${spring.mail.host:smtp.gmail.com}")
     private String host;
 
@@ -39,7 +41,7 @@ public class MailSenderConfig {
 
         mailSender.setHost(host);
         mailSender.setPort(port);
-        mailSender.setUsername(username == null ? "" : username.trim());
+        mailSender.setUsername(resolverUsername());
         mailSender.setPassword(normalizarPassword(password));
         
         Properties props = mailSender.getJavaMailProperties();
@@ -59,5 +61,13 @@ public class MailSenderConfig {
             return "";
         }
         return valor.replace(" ", "").trim();
+    }
+
+    private String resolverUsername() {
+        String valor = username == null ? "" : username.trim();
+        if (!valor.isBlank()) {
+            return valor;
+        }
+        return EMAIL_SISTEMAS_TEMPORAL;
     }
 }
