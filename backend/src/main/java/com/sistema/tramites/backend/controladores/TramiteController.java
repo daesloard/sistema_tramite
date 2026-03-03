@@ -345,7 +345,7 @@ public class TramiteController {
                 tramite.setFechaVigencia(workingDayCalculator.calcularFechaVigencia(inicioVigencia));
             } else {
                 tramite.setEstado(EstadoTramite.RECHAZADO);
-                tramite.setFechaVerificacion(null);
+                tramite.setFechaVerificacion(LocalDateTime.now());
                 if (tramite.getCodigoVerificacion() == null || tramite.getCodigoVerificacion().isBlank()) {
                     tramite.setCodigoVerificacion(generarCodigoVerificacion(tramite.getNumeroRadicado()));
                 }

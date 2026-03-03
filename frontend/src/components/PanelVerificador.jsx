@@ -84,6 +84,22 @@ const cumpleFiltro = (solicitud, filtro) => {
   return solicitud.estado === 'RECHAZADO';
 };
 
+const formatearFechaHora = (valor) => {
+  if (!valor) return 'Sin fecha';
+  const fecha = new Date(valor);
+  if (Number.isNaN(fecha.getTime())) return 'Sin fecha';
+  const esSoloFecha = typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor);
+  return esSoloFecha
+    ? fecha.toLocaleDateString('es-CO')
+    : fecha.toLocaleString('es-CO', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+};
+
 export default function PanelVerificador() {
   const [solicitudes, setSolicitudes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -434,7 +450,7 @@ export default function PanelVerificador() {
                   <div key={`cert-${cert.id}`} style={styles.certItem}>
                     <p style={styles.certMeta}><strong>{cert.numeroRadicado}</strong> · {cert.nombreSolicitante}</p>
                     <p style={styles.certMeta}>Respuesta: {cert.estado === 'FINALIZADO' ? 'Positiva' : 'Negativa'} · Tipo: {cert.tipo_certificado || 'Certificado'}</p>
-                    <p style={styles.certMeta}>Fecha: {new Date(cert.fechaRadicacion).toLocaleDateString('es-CO')}</p>
+                    <p style={styles.certMeta}>Fecha: {formatearFechaHora(cert.fechaVerificacion || cert.fechaFirmaAlcalde || cert.fechaRadicacion)}</p>
                   </div>
                 ))}
               </div>
@@ -470,7 +486,7 @@ export default function PanelVerificador() {
                     <p style={styles.itemP}><strong>{solicitud.nombreSolicitante}</strong></p>
                     <p style={styles.itemP}>{solicitud.numeroDocumento}</p>
                     <p style={{ ...styles.itemP, color: '#95a5a6', fontSize: '12px' }}>
-                      Radicado: {new Date(solicitud.fechaRadicacion).toLocaleDateString('es-CO')}
+                      Radicado: {formatearFechaHora(solicitud.fechaRadicacion)}
                     </p>
                   </div>
                 );
@@ -514,7 +530,7 @@ export default function PanelVerificador() {
                   <div style={styles.cardInfo}><span style={styles.label}>Radicado</span><p style={styles.value}>{selectedSolicitud.numeroRadicado}</p></div>
                   <div style={styles.cardInfo}><span style={styles.label}>Estado</span><p style={styles.value}>{selectedSolicitud.estado}</p></div>
                   <div style={styles.cardInfo}><span style={styles.label}>Tipo Certificado</span><p style={styles.value}>{selectedSolicitud.tipo_certificado || 'No especificado'}</p></div>
-                  <div style={styles.cardInfo}><span style={styles.label}>Fecha Radicación</span><p style={styles.value}>{new Date(selectedSolicitud.fechaRadicacion).toLocaleDateString('es-CO')}</p></div>
+                  <div style={styles.cardInfo}><span style={styles.label}>Fecha Radicación</span><p style={styles.value}>{formatearFechaHora(selectedSolicitud.fechaRadicacion)}</p></div>
                   <div style={styles.cardInfo}><span style={styles.label}>Consecutivo Verificador</span><input style={styles.input} value={consecutivo} onChange={(e) => setConsecutivo(e.target.value.toUpperCase())} readOnly={!esPendienteSeleccionada} /></div>
                 </div>
               </div>
@@ -529,6 +545,11 @@ export default function PanelVerificador() {
                 {!loadingDocumentos && !documentosObligatoriosCompletos && esPendienteSeleccionada ? (
                   <div style={styles.warning}>
                     ⚠️ Faltan documentos obligatorios: {documentosFaltantes.join(', ')}. No podrás aprobar ni rechazar hasta que estén completos.
+                  </div>
+                ) : null}
+                {documentStatus?.driveHabilitado ? (
+                  <div style={{ ...styles.nota, marginTop: '0.5rem' }}>
+                    Carpeta Drive del trámite: {documentStatus?.driveFolderId || 'No asignada aún'}
                   </div>
                 ) : null}
                 <div style={styles.docs}>
