@@ -32,23 +32,28 @@ import java.util.Optional;
 @RequestMapping("/api/tramites")
 public class TramiteController {
 
+    private static final String DRIVE_PREFIX = "drive:";
+
     private final TramiteRepository tramiteRepository;
     private final WorkingDayCalculator workingDayCalculator;
     private final EmailService emailService;
     private final DocumentoGeneradoService documentoGeneradoService;
     private final UsuarioRepository usuarioRepository;
+    private final DriveStorageService driveStorageService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public TramiteController(TramiteRepository tramiteRepository, 
                            WorkingDayCalculator workingDayCalculator,
                            EmailService emailService,
                            DocumentoGeneradoService documentoGeneradoService,
-                           UsuarioRepository usuarioRepository) {
+                           UsuarioRepository usuarioRepository,
+                           DriveStorageService driveStorageService) {
         this.tramiteRepository = tramiteRepository;
         this.workingDayCalculator = workingDayCalculator;
         this.emailService = emailService;
         this.documentoGeneradoService = documentoGeneradoService;
         this.usuarioRepository = usuarioRepository;
+        this.driveStorageService = driveStorageService;
     }
 
     @GetMapping
@@ -132,29 +137,55 @@ public class TramiteController {
                 if (solicitud.getDocumento_identidad_base64() != null && !solicitud.getDocumento_identidad_base64().isEmpty()) {
                 byte[] documentoIdentidad = Base64.getDecoder()
                     .decode(solicitud.getDocumento_identidad_base64());
-                tramite.setContenidoDocumentoIdentidad(documentoIdentidad);
                 String nombreIdentidad = solicitud.getDocumento_identidad_nombre();
                 String tipoIdentidad = solicitud.getDocumento_identidad_tipo();
+                String nombreFinalIdentidad = nombreIdentidad != null && !nombreIdentidad.isBlank()
+                    ? nombreIdentidad
+                    : "documento_identidad_" + System.currentTimeMillis();
+                String tipoFinalIdentidad = tipoIdentidad != null && !tipoIdentidad.isBlank()
+                    ? tipoIdentidad
+                    : "application/pdf";
                 tramite.setNombreArchivoIdentidad(nombreIdentidad != null && !nombreIdentidad.isBlank()
                     ? nombreIdentidad
                     : "documento_identidad_" + System.currentTimeMillis());
                 tramite.setTipoContenidoIdentidad(tipoIdentidad != null && !tipoIdentidad.isBlank()
                     ? tipoIdentidad
                     : "application/pdf");
+
+                if (driveStorageService.isEnabled()) {
+                    String driveId = driveStorageService.uploadFile(nombreFinalIdentidad, tipoFinalIdentidad, documentoIdentidad);
+                    tramite.setRuta_documento_identidad(DRIVE_PREFIX + driveId);
+                    tramite.setContenidoDocumentoIdentidad(null);
+                } else {
+                    tramite.setContenidoDocumentoIdentidad(documentoIdentidad);
+                }
                 }
 
                 if (solicitud.getDocumento_solicitud_base64() != null && !solicitud.getDocumento_solicitud_base64().isEmpty()) {
                 byte[] documentoSolicitud = Base64.getDecoder()
                     .decode(solicitud.getDocumento_solicitud_base64());
-                tramite.setContenidoDocumentoSolicitud(documentoSolicitud);
                 String nombreSolicitud = solicitud.getDocumento_solicitud_nombre();
                 String tipoSolicitud = solicitud.getDocumento_solicitud_tipo();
+                String nombreFinalSolicitud = nombreSolicitud != null && !nombreSolicitud.isBlank()
+                    ? nombreSolicitud
+                    : "documento_solicitud_" + System.currentTimeMillis();
+                String tipoFinalSolicitud = tipoSolicitud != null && !tipoSolicitud.isBlank()
+                    ? tipoSolicitud
+                    : "application/pdf";
                 tramite.setNombreArchivoSolicitud(nombreSolicitud != null && !nombreSolicitud.isBlank()
                     ? nombreSolicitud
                     : "documento_solicitud_" + System.currentTimeMillis());
                 tramite.setTipoContenidoSolicitud(tipoSolicitud != null && !tipoSolicitud.isBlank()
                     ? tipoSolicitud
                     : "application/pdf");
+
+                if (driveStorageService.isEnabled()) {
+                    String driveId = driveStorageService.uploadFile(nombreFinalSolicitud, tipoFinalSolicitud, documentoSolicitud);
+                    tramite.setRuta_documento_solicitud(DRIVE_PREFIX + driveId);
+                    tramite.setContenidoDocumentoSolicitud(null);
+                } else {
+                    tramite.setContenidoDocumentoSolicitud(documentoSolicitud);
+                }
                 }
 
                 if (solicitud.getCertificado_base64() != null && !solicitud.getCertificado_base64().isEmpty()) {
@@ -169,31 +200,54 @@ public class TramiteController {
                     ? tipoCertificado
                     : "application/pdf";
 
+                String driveIdCertificado = null;
+                if (driveStorageService.isEnabled()) {
+                    driveIdCertificado = driveStorageService.uploadFile(nombreFinal, tipoFinal, certificado);
+                }
+
                 // Respaldo genérico: garantiza disponibilidad del 3er adjunto en correo de radicación
-                tramite.setContenidoDocumentoResidencia(certificado);
+                tramite.setContenidoDocumentoResidencia(driveIdCertificado != null ? null : certificado);
                 tramite.setNombreArchivoResidencia(nombreFinal);
                 tramite.setTipoContenidoResidencia(tipoFinal);
+                if (driveIdCertificado != null) {
+                    tramite.setRuta_certificado(DRIVE_PREFIX + driveIdCertificado);
+                }
 
                 String tipoSeleccionado = solicitud.getTipo_certificado();
                 if ("SISBEN".equalsIgnoreCase(tipoSeleccionado)) {
-                    tramite.setContenidoCertificadoSisben(certificado);
+                    tramite.setContenidoCertificadoSisben(driveIdCertificado != null ? null : certificado);
                     tramite.setNombreArchivoSisben(nombreFinal);
                     tramite.setTipoContenidoSisben(tipoFinal);
+                    if (driveIdCertificado != null) {
+                        tramite.setRuta_certificado_sisben(DRIVE_PREFIX + driveIdCertificado);
+                    }
                 } else if ("ELECTORAL".equalsIgnoreCase(tipoSeleccionado)) {
-                    tramite.setContenidoCertificadoElectoral(certificado);
+                    tramite.setContenidoCertificadoElectoral(driveIdCertificado != null ? null : certificado);
                     tramite.setNombreArchivoElectoral(nombreFinal);
                     tramite.setTipoContenidoElectoral(tipoFinal);
+                    if (driveIdCertificado != null) {
+                        tramite.setRuta_certificado_electoral(DRIVE_PREFIX + driveIdCertificado);
+                    }
                 } else {
-                    tramite.setContenidoDocumentoResidencia(certificado);
+                    tramite.setContenidoDocumentoResidencia(driveIdCertificado != null ? null : certificado);
                     tramite.setNombreArchivoResidencia(nombreFinal);
                     tramite.setTipoContenidoResidencia(tipoFinal);
+                    if (driveIdCertificado != null) {
+                        tramite.setRuta_certificado(DRIVE_PREFIX + driveIdCertificado);
+                    }
                 }
                 }
             
             // Rutas legacy para compatibilidad
-            tramite.setRuta_documento_solicitud("doc_solicitud_" + System.currentTimeMillis());
-            tramite.setRuta_documento_identidad("doc_identidad_" + System.currentTimeMillis());
-            tramite.setRuta_certificado("certificado_" + System.currentTimeMillis());
+            if (tramite.getRuta_documento_solicitud() == null || tramite.getRuta_documento_solicitud().isBlank()) {
+                tramite.setRuta_documento_solicitud("doc_solicitud_" + System.currentTimeMillis());
+            }
+            if (tramite.getRuta_documento_identidad() == null || tramite.getRuta_documento_identidad().isBlank()) {
+                tramite.setRuta_documento_identidad("doc_identidad_" + System.currentTimeMillis());
+            }
+            if (tramite.getRuta_certificado() == null || tramite.getRuta_certificado().isBlank()) {
+                tramite.setRuta_certificado("certificado_" + System.currentTimeMillis());
+            }
             
             // Calcular vencimiento (10 días hábiles)
             LocalDate fechaVencimiento = workingDayCalculator
