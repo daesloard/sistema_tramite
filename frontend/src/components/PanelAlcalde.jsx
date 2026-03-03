@@ -250,7 +250,7 @@ export default function PanelAlcalde() {
   const cargarVistaPrevia = async (tramiteId) => {
     setLoadingVistaPrevia(true);
     try {
-      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/vista-previa-documento`);
+      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/vista-previa-documento?includePdf=false`);
       if (!response.ok) throw new Error('No se pudo cargar la vista previa');
       const data = await response.json();
       setVistaPrevia(data.contenido || '');

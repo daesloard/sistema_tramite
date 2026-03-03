@@ -627,7 +627,8 @@ public class TramiteController {
     }
 
     @GetMapping("/{id}/vista-previa-documento")
-    public ResponseEntity<?> vistaPreviaDocumento(@PathVariable Long id) {
+    public ResponseEntity<?> vistaPreviaDocumento(@PathVariable Long id,
+                                                  @RequestParam(value = "includePdf", defaultValue = "false") boolean includePdf) {
         try {
             Optional<Tramite> optTramite = tramiteRepository.findById(id);
             if (optTramite.isEmpty()) {
@@ -658,14 +659,16 @@ public class TramiteController {
 
             byte[] pdfVistaPrevia = null;
             String errorPdf = null;
-            try {
-                pdfVistaPrevia = documentoGeneradoService.generarPdfDocumento(
-                        tramite,
-                        aprobado,
-                        tramite.getObservaciones()
-                );
-            } catch (Exception ex) {
-                errorPdf = ex.getMessage();
+            if (includePdf) {
+                try {
+                    pdfVistaPrevia = documentoGeneradoService.generarPdfDocumento(
+                            tramite,
+                            aprobado,
+                            tramite.getObservaciones()
+                    );
+                } catch (Exception ex) {
+                    errorPdf = ex.getMessage();
+                }
             }
 
             var respuesta = new java.util.HashMap<String, Object>();
