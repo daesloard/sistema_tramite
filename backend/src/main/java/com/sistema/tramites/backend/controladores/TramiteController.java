@@ -764,69 +764,6 @@ public class TramiteController {
             return false;
         }
 
-        private String normalizarCorreo(String correo) {
-            if (correo == null) {
-                return null;
-            }
-            String normalizado = correo.trim().toLowerCase(Locale.ROOT);
-            return normalizado.isBlank() ? null : normalizado;
-        }
-
-        private boolean consecutivoYaUsadoEnAnio(String consecutivo, int anio, Long tramiteActualId) {
-            LocalDateTime inicio = LocalDate.of(anio, 1, 1).atStartOfDay();
-            LocalDateTime fin = LocalDate.of(anio + 1, 1, 1).atStartOfDay();
-
-            return tramiteRepository.findAllByFechaRadicacionBetweenAndConsecutivoVerificadorIsNotNull(inicio, fin).stream()
-                    .filter(t -> tramiteActualId == null || !Objects.equals(t.getId(), tramiteActualId))
-                    .map(Tramite::getConsecutivoVerificador)
-                    .map(this::normalizarConsecutivo)
-                    .filter(Objects::nonNull)
-                    .anyMatch(consecutivo::equals);
-        }
-
-        private String generarSiguienteConsecutivo(int anio) {
-            LocalDateTime inicio = LocalDate.of(anio, 1, 1).atStartOfDay();
-            LocalDateTime fin = LocalDate.of(anio + 1, 1, 1).atStartOfDay();
-
-            int maximo = tramiteRepository.findAllByFechaRadicacionBetweenAndConsecutivoVerificadorIsNotNull(inicio, fin).stream()
-                    .map(Tramite::getConsecutivoVerificador)
-                    .map(this::normalizarConsecutivo)
-                    .filter(Objects::nonNull)
-                    .mapToInt(Integer::parseInt)
-                    .max()
-                    .orElse(0);
-
-            return String.format("%03d", maximo + 1);
-        }
-
-        private String normalizarConsecutivo(String valor) {
-            if (valor == null) {
-                return null;
-            }
-
-            String soloNumeros = valor.trim().replaceAll("\\D", "");
-            if (soloNumeros.isBlank()) {
-                return null;
-            }
-
-            int numero;
-            try {
-                numero = Integer.parseInt(soloNumeros);
-            } catch (NumberFormatException ex) {
-                return null;
-            }
-
-            if (numero <= 0) {
-                return null;
-            }
-
-            if (numero > 999999) {
-                return null;
-            }
-
-            return String.format("%03d", numero);
-        }
-
         if ("PRIMER_NOMBRE".equals(tipo)) {
             String primerNombreRegistrado = extraerPrimerNombre(tramite.getNombreSolicitante());
             return coincidePrimerNombre(valorIngresado, primerNombreRegistrado);
@@ -843,6 +780,69 @@ public class TramiteController {
         }
 
         return false;
+    }
+
+    private String normalizarCorreo(String correo) {
+        if (correo == null) {
+            return null;
+        }
+        String normalizado = correo.trim().toLowerCase(Locale.ROOT);
+        return normalizado.isBlank() ? null : normalizado;
+    }
+
+    private boolean consecutivoYaUsadoEnAnio(String consecutivo, int anio, Long tramiteActualId) {
+        LocalDateTime inicio = LocalDate.of(anio, 1, 1).atStartOfDay();
+        LocalDateTime fin = LocalDate.of(anio + 1, 1, 1).atStartOfDay();
+
+        return tramiteRepository.findAllByFechaRadicacionBetweenAndConsecutivoVerificadorIsNotNull(inicio, fin).stream()
+                .filter(t -> tramiteActualId == null || !Objects.equals(t.getId(), tramiteActualId))
+                .map(Tramite::getConsecutivoVerificador)
+                .map(this::normalizarConsecutivo)
+                .filter(Objects::nonNull)
+                .anyMatch(consecutivo::equals);
+    }
+
+    private String generarSiguienteConsecutivo(int anio) {
+        LocalDateTime inicio = LocalDate.of(anio, 1, 1).atStartOfDay();
+        LocalDateTime fin = LocalDate.of(anio + 1, 1, 1).atStartOfDay();
+
+        int maximo = tramiteRepository.findAllByFechaRadicacionBetweenAndConsecutivoVerificadorIsNotNull(inicio, fin).stream()
+                .map(Tramite::getConsecutivoVerificador)
+                .map(this::normalizarConsecutivo)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::parseInt)
+                .max()
+                .orElse(0);
+
+        return String.format("%03d", maximo + 1);
+    }
+
+    private String normalizarConsecutivo(String valor) {
+        if (valor == null) {
+            return null;
+        }
+
+        String soloNumeros = valor.trim().replaceAll("\\D", "");
+        if (soloNumeros.isBlank()) {
+            return null;
+        }
+
+        int numero;
+        try {
+            numero = Integer.parseInt(soloNumeros);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+
+        if (numero <= 0) {
+            return null;
+        }
+
+        if (numero > 999999) {
+            return null;
+        }
+
+        return String.format("%03d", numero);
     }
 
     private String normalizarTextoComparacion(String valor) {
