@@ -284,12 +284,11 @@ public class FileUploadController {
                 verificacion.jac = verificacion.residencia;
 
             verificacion.tramiteId = tramite.getId();
-            verificacion.totalDocumentosCargados = 
-                    (tramite.getContenidoDocumentoIdentidad() != null ? 1 : 0) +
-                    (tramite.getContenidoDocumentoSolicitud() != null ? 1 : 0) +
-                    (tramite.getContenidoCertificadoSisben() != null ? 1 : 0) +
-                    (tramite.getContenidoCertificadoElectoral() != null ? 1 : 0) +
-                    (tramite.getContenidoDocumentoResidencia() != null ? 1 : 0);
+                String claveCertificado = resolverClaveCertificado(tramite.getTipo_certificado());
+                verificacion.totalDocumentosCargados =
+                    (tieneContenido(tramite.getContenidoDocumentoIdentidad()) ? 1 : 0) +
+                    (tieneContenido(tramite.getContenidoDocumentoSolicitud()) ? 1 : 0) +
+                    (documentoCertificadoCargado(tramite, claveCertificado) ? 1 : 0);
 
             return ResponseEntity.ok(verificacion);
 
