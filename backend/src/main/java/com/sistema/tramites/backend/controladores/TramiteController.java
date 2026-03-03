@@ -1,4 +1,6 @@
-package com.sistema.tramites.backend;
+package com.sistema.tramites.backend.controladores;
+
+import com.sistema.tramites.backend.*;
 
 import jakarta.validation.Valid;
 import org.apache.poi.ss.usermodel.Row;

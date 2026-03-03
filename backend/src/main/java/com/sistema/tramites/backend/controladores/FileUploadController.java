@@ -1,4 +1,6 @@
-package com.sistema.tramites.backend;
+package com.sistema.tramites.backend.controladores;
+
+import com.sistema.tramites.backend.*;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
