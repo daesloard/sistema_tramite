@@ -311,6 +311,18 @@ export default function App() {
     }
   }, [vista, usuarioActual, cargarTramites, cargarUsuariosOperativos]);
 
+  useEffect(() => {
+    if (!(vista === 'panel' && usuarioActual?.rol === 'ADMINISTRADOR')) {
+      return;
+    }
+
+    const intervalo = setInterval(() => {
+      cargarTramites();
+    }, 30000);
+
+    return () => clearInterval(intervalo);
+  }, [vista, usuarioActual, cargarTramites]);
+
   const actualizarCampoUsuario = (id, campo, valor) => {
     setUsuariosOperativos((prev) => prev.map((u) => (u.id === id ? { ...u, [campo]: valor } : u)));
   };
@@ -479,6 +491,36 @@ export default function App() {
       const link = document.createElement('a');
       link.href = url;
       link.download = `${tipo}_${tramiteId}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  };
+
+  const abrirDocumentoGeneradoAdmin = async (tramiteId) => {
+    try {
+      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/documento-generado`);
+      if (!response.ok) throw new Error('Documento generado no disponible para abrir');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  };
+
+  const descargarDocumentoGeneradoAdmin = async (tramiteId, radicado) => {
+    try {
+      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/documento-generado`);
+      if (!response.ok) throw new Error('Documento generado no disponible para descarga');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `certificado_generado_${radicado || tramiteId}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -885,6 +927,16 @@ export default function App() {
                                         </div>
                                       );
                                     })}
+
+                                    {(tramite.estado === 'FINALIZADO' || tramite.estado === 'RECHAZADO') ? (
+                                      <div style={styles.adminDocItem}>
+                                        <span style={styles.adminDocLabel}>Certificado generado (firmado)</span>
+                                        <div style={styles.adminDocBtns}>
+                                          <button style={styles.btnDocVer} onClick={() => abrirDocumentoGeneradoAdmin(tramite.id)}>Ver</button>
+                                          <button style={styles.btnDocDesc} onClick={() => descargarDocumentoGeneradoAdmin(tramite.id, tramite.numeroRadicado)}>Descargar</button>
+                                        </div>
+                                      </div>
+                                    ) : null}
 
                                     <input
                                       style={styles.inputAdminMensaje}

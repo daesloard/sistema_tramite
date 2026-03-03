@@ -1,4 +1,6 @@
-package com.sistema.tramites.backend;
+package com.sistema.tramites.backend.controladores;
+
+import com.sistema.tramites.backend.*;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -15,16 +17,21 @@ import java.util.Optional;
 @RequestMapping("/api/tramites")
 public class FileUploadController {
 
+    private static final String DRIVE_PREFIX = "drive:";
+
     private final TramiteRepository tramiteRepository;
     private final UsuarioRepository usuarioRepository;
     private final EmailService emailService;
+    private final DriveStorageService driveStorageService;
 
     public FileUploadController(TramiteRepository tramiteRepository,
                                 UsuarioRepository usuarioRepository,
-                                EmailService emailService) {
+                                EmailService emailService,
+                                DriveStorageService driveStorageService) {
         this.tramiteRepository = tramiteRepository;
         this.usuarioRepository = usuarioRepository;
         this.emailService = emailService;
+        this.driveStorageService = driveStorageService;
     }
 
     /**
@@ -110,31 +117,42 @@ public class FileUploadController {
             Tramite tramite = tramiteOpt.get();
 
             // Guardar el archivo según el tipo
+            byte[] contenido = file.getBytes();
+            String driveId = null;
+            if (driveStorageService.isEnabled()) {
+                driveId = driveStorageService.uploadFile(file.getOriginalFilename(), contentType, contenido);
+            }
+
             switch (tipo.toLowerCase()) {
                 case "sisben":
-                    tramite.setContenidoCertificadoSisben(file.getBytes());
+                    tramite.setContenidoCertificadoSisben(driveId != null ? null : contenido);
                     tramite.setNombreArchivoSisben(file.getOriginalFilename());
                     tramite.setTipoContenidoSisben(contentType);
+                    tramite.setRuta_certificado_sisben(driveId != null ? DRIVE_PREFIX + driveId : null);
                     break;
                 case "electoral":
-                    tramite.setContenidoCertificadoElectoral(file.getBytes());
+                    tramite.setContenidoCertificadoElectoral(driveId != null ? null : contenido);
                     tramite.setNombreArchivoElectoral(file.getOriginalFilename());
                     tramite.setTipoContenidoElectoral(contentType);
+                    tramite.setRuta_certificado_electoral(driveId != null ? DRIVE_PREFIX + driveId : null);
                     break;
                 case "residencia":
-                    tramite.setContenidoDocumentoResidencia(file.getBytes());
+                    tramite.setContenidoDocumentoResidencia(driveId != null ? null : contenido);
                     tramite.setNombreArchivoResidencia(file.getOriginalFilename());
                     tramite.setTipoContenidoResidencia(contentType);
+                    tramite.setRuta_certificado(driveId != null ? DRIVE_PREFIX + driveId : null);
                     break;
                 case "identidad":
-                    tramite.setContenidoDocumentoIdentidad(file.getBytes());
+                    tramite.setContenidoDocumentoIdentidad(driveId != null ? null : contenido);
                     tramite.setNombreArchivoIdentidad(file.getOriginalFilename());
                     tramite.setTipoContenidoIdentidad(contentType);
+                    tramite.setRuta_documento_identidad(driveId != null ? DRIVE_PREFIX + driveId : null);
                     break;
                 case "solicitud":
-                    tramite.setContenidoDocumentoSolicitud(file.getBytes());
+                    tramite.setContenidoDocumentoSolicitud(driveId != null ? null : contenido);
                     tramite.setNombreArchivoSolicitud(file.getOriginalFilename());
                     tramite.setTipoContenidoSolicitud(contentType);
+                    tramite.setRuta_documento_solicitud(driveId != null ? DRIVE_PREFIX + driveId : null);
                     break;
                 default:
                     return ResponseEntity.badRequest().body("❌ Tipo de documento no válido");
@@ -175,36 +193,46 @@ public class FileUploadController {
             byte[] contenido = null;
             String nombreArchivo = null;
             String contentType = null;
+            String driveFileId = null;
 
             switch (tipo.toLowerCase()) {
                 case "sisben":
                     contenido = tramite.getContenidoCertificadoSisben();
                     nombreArchivo = tramite.getNombreArchivoSisben();
                     contentType = tramite.getTipoContenidoSisben();
+                    driveFileId = extraerDriveFileId(tramite.getRuta_certificado_sisben());
                     break;
                 case "electoral":
                     contenido = tramite.getContenidoCertificadoElectoral();
                     nombreArchivo = tramite.getNombreArchivoElectoral();
                     contentType = tramite.getTipoContenidoElectoral();
+                    driveFileId = extraerDriveFileId(tramite.getRuta_certificado_electoral());
                     break;
                 case "residencia":
                 case "jac":
                     contenido = tramite.getContenidoDocumentoResidencia();
                     nombreArchivo = tramite.getNombreArchivoResidencia();
                     contentType = tramite.getTipoContenidoResidencia();
+                    driveFileId = extraerDriveFileId(tramite.getRuta_certificado());
                     break;
                 case "identidad":
                     contenido = tramite.getContenidoDocumentoIdentidad();
                     nombreArchivo = tramite.getNombreArchivoIdentidad();
                     contentType = tramite.getTipoContenidoIdentidad();
+                    driveFileId = extraerDriveFileId(tramite.getRuta_documento_identidad());
                     break;
                 case "solicitud":
                     contenido = tramite.getContenidoDocumentoSolicitud();
                     nombreArchivo = tramite.getNombreArchivoSolicitud();
                     contentType = tramite.getTipoContenidoSolicitud();
+                    driveFileId = extraerDriveFileId(tramite.getRuta_documento_solicitud());
                     break;
                 default:
                     return ResponseEntity.badRequest().body("❌ Tipo de documento no válido");
+            }
+
+            if (driveFileId != null && driveStorageService.isEnabled()) {
+                contenido = driveStorageService.downloadFile(driveFileId);
             }
 
             if (contenido == null || contenido.length == 0) {
@@ -241,7 +269,7 @@ public class FileUploadController {
 
             // Verificar Identidad
             verificacion.identidad = new DocumentoStatusDTO(
-                    tramite.getContenidoDocumentoIdentidad() != null,
+                    tieneContenidoOStorage(tramite.getContenidoDocumentoIdentidad(), tramite.getRuta_documento_identidad()),
                     tramite.getNombreArchivoIdentidad(),
                     tramite.getTipoContenidoIdentidad(),
                     tramite.getContenidoDocumentoIdentidad() != null ? tramite.getContenidoDocumentoIdentidad().length : 0
@@ -249,7 +277,7 @@ public class FileUploadController {
 
             // Verificar Solicitud
             verificacion.solicitud = new DocumentoStatusDTO(
-                    tramite.getContenidoDocumentoSolicitud() != null,
+                    tieneContenidoOStorage(tramite.getContenidoDocumentoSolicitud(), tramite.getRuta_documento_solicitud()),
                     tramite.getNombreArchivoSolicitud(),
                     tramite.getTipoContenidoSolicitud(),
                     tramite.getContenidoDocumentoSolicitud() != null ? tramite.getContenidoDocumentoSolicitud().length : 0
@@ -257,7 +285,7 @@ public class FileUploadController {
 
             // Verificar SISBEN
             verificacion.sisben = new DocumentoStatusDTO(
-                    tramite.getContenidoCertificadoSisben() != null,
+                    tieneContenidoOStorage(tramite.getContenidoCertificadoSisben(), tramite.getRuta_certificado_sisben()),
                     tramite.getNombreArchivoSisben(),
                     tramite.getTipoContenidoSisben(),
                     tramite.getContenidoCertificadoSisben() != null ? tramite.getContenidoCertificadoSisben().length : 0
@@ -265,7 +293,7 @@ public class FileUploadController {
 
             // Verificar Electoral
             verificacion.electoral = new DocumentoStatusDTO(
-                    tramite.getContenidoCertificadoElectoral() != null,
+                    tieneContenidoOStorage(tramite.getContenidoCertificadoElectoral(), tramite.getRuta_certificado_electoral()),
                     tramite.getNombreArchivoElectoral(),
                     tramite.getTipoContenidoElectoral(),
                     tramite.getContenidoCertificadoElectoral() != null ? tramite.getContenidoCertificadoElectoral().length : 0
@@ -273,7 +301,7 @@ public class FileUploadController {
 
             // Verificar Residencia
             verificacion.residencia = new DocumentoStatusDTO(
-                    tramite.getContenidoDocumentoResidencia() != null,
+                    tieneContenidoOStorage(tramite.getContenidoDocumentoResidencia(), tramite.getRuta_certificado()),
                     tramite.getNombreArchivoResidencia(),
                     tramite.getTipoContenidoResidencia(),
                     tramite.getContenidoDocumentoResidencia() != null ? tramite.getContenidoDocumentoResidencia().length : 0
@@ -282,12 +310,11 @@ public class FileUploadController {
                 verificacion.jac = verificacion.residencia;
 
             verificacion.tramiteId = tramite.getId();
-            verificacion.totalDocumentosCargados = 
-                    (tramite.getContenidoDocumentoIdentidad() != null ? 1 : 0) +
-                    (tramite.getContenidoDocumentoSolicitud() != null ? 1 : 0) +
-                    (tramite.getContenidoCertificadoSisben() != null ? 1 : 0) +
-                    (tramite.getContenidoCertificadoElectoral() != null ? 1 : 0) +
-                    (tramite.getContenidoDocumentoResidencia() != null ? 1 : 0);
+                String claveCertificado = resolverClaveCertificado(tramite.getTipo_certificado());
+                verificacion.totalDocumentosCargados =
+                    (tieneContenidoOStorage(tramite.getContenidoDocumentoIdentidad(), tramite.getRuta_documento_identidad()) ? 1 : 0) +
+                    (tieneContenidoOStorage(tramite.getContenidoDocumentoSolicitud(), tramite.getRuta_documento_solicitud()) ? 1 : 0) +
+                    (documentoCertificadoCargado(tramite, claveCertificado) ? 1 : 0);
 
             return ResponseEntity.ok(verificacion);
 
@@ -316,8 +343,8 @@ public class FileUploadController {
             }
 
             String claveCertificado = resolverClaveCertificado(tramite.getTipo_certificado());
-            boolean identidadCargada = tieneContenido(tramite.getContenidoDocumentoIdentidad());
-            boolean solicitudCargada = tieneContenido(tramite.getContenidoDocumentoSolicitud());
+            boolean identidadCargada = tieneContenidoOStorage(tramite.getContenidoDocumentoIdentidad(), tramite.getRuta_documento_identidad());
+            boolean solicitudCargada = tieneContenidoOStorage(tramite.getContenidoDocumentoSolicitud(), tramite.getRuta_documento_solicitud());
             boolean certificadoCargado = documentoCertificadoCargado(tramite, claveCertificado);
 
             List<String> faltantes = new ArrayList<>();
@@ -392,16 +419,31 @@ public class FileUploadController {
 
     private boolean documentoCertificadoCargado(Tramite tramite, String claveCertificado) {
         if ("electoral".equalsIgnoreCase(claveCertificado)) {
-            return tieneContenido(tramite.getContenidoCertificadoElectoral());
+            return tieneContenidoOStorage(tramite.getContenidoCertificadoElectoral(), tramite.getRuta_certificado_electoral());
         }
         if ("residencia".equalsIgnoreCase(claveCertificado)) {
-            return tieneContenido(tramite.getContenidoDocumentoResidencia());
+            return tieneContenidoOStorage(tramite.getContenidoDocumentoResidencia(), tramite.getRuta_certificado());
         }
-        return tieneContenido(tramite.getContenidoCertificadoSisben());
+        return tieneContenidoOStorage(tramite.getContenidoCertificadoSisben(), tramite.getRuta_certificado_sisben());
     }
 
     private boolean tieneContenido(byte[] contenido) {
         return contenido != null && contenido.length > 0;
+    }
+
+    private boolean tieneContenidoOStorage(byte[] contenido, String ruta) {
+        return tieneContenido(contenido) || extraerDriveFileId(ruta) != null;
+    }
+
+    private String extraerDriveFileId(String ruta) {
+        if (ruta == null) {
+            return null;
+        }
+        String valor = ruta.trim();
+        if (valor.startsWith(DRIVE_PREFIX) && valor.length() > DRIVE_PREFIX.length()) {
+            return valor.substring(DRIVE_PREFIX.length());
+        }
+        return null;
     }
 
     /**

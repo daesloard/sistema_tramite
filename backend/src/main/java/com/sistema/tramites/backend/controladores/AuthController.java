@@ -1,9 +1,13 @@
-package com.sistema.tramites.backend;
+package com.sistema.tramites.backend.controladores;
+
+import com.sistema.tramites.backend.*;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
@@ -11,6 +15,8 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
     private final UsuarioRepository usuarioRepository;
     private final JwtService jwtService;
@@ -44,9 +50,14 @@ public class AuthController {
             Usuario usuario = usuarioOpt.get();
 
             // Verificar que el usuario esté activo
-            if (!usuario.getActivo()) {
+            if (!Boolean.TRUE.equals(usuario.getActivo())) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body("❌ Usuario desactivado");
+            }
+
+            if (usuario.getRol() == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body("❌ Usuario sin rol asignado");
             }
 
             // Verificar contraseña
@@ -91,6 +102,7 @@ public class AuthController {
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
+            log.error("Error en login para usuario [{}]: {}", loginDTO != null ? loginDTO.getUsername() : "null", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("❌ Error interno durante autenticación");
         }

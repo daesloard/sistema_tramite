@@ -573,11 +573,68 @@ public class DocumentoGeneradoService {
 
             reemplazarMarcadoresEnDocumento(wordDoc, tramite, observacion);
             insertarFirmaEnDocumento(wordDoc, tramite);
+            aplicarFuenteMavenPro(wordDoc);
             normalizarIdsInternosParaPdf(wordDoc);
             preservarEspaciadoPlantillaParaPdf(wordDoc);
             return convertirDocxConPlantillaAPdf(wordDoc);
         } catch (IOException e) {
             throw new IllegalStateException("No fue posible generar PDF desde plantilla DOCX", e);
+        }
+    }
+
+    private void aplicarFuenteMavenPro(XWPFDocument document) {
+        if (document == null) {
+            return;
+        }
+
+        for (XWPFParagraph paragraph : document.getParagraphs()) {
+            aplicarFuenteMavenProEnParrafo(paragraph);
+        }
+
+        for (XWPFTable table : document.getTables()) {
+            aplicarFuenteMavenProEnTabla(table);
+        }
+
+        for (XWPFHeader header : document.getHeaderList()) {
+            for (XWPFParagraph paragraph : header.getParagraphs()) {
+                aplicarFuenteMavenProEnParrafo(paragraph);
+            }
+            for (XWPFTable table : header.getTables()) {
+                aplicarFuenteMavenProEnTabla(table);
+            }
+        }
+
+        for (XWPFFooter footer : document.getFooterList()) {
+            for (XWPFParagraph paragraph : footer.getParagraphs()) {
+                aplicarFuenteMavenProEnParrafo(paragraph);
+            }
+            for (XWPFTable table : footer.getTables()) {
+                aplicarFuenteMavenProEnTabla(table);
+            }
+        }
+    }
+
+    private void aplicarFuenteMavenProEnTabla(XWPFTable table) {
+        for (XWPFTableRow row : table.getRows()) {
+            for (XWPFTableCell cell : row.getTableCells()) {
+                for (XWPFParagraph paragraph : cell.getParagraphs()) {
+                    aplicarFuenteMavenProEnParrafo(paragraph);
+                }
+                for (XWPFTable nested : cell.getTables()) {
+                    aplicarFuenteMavenProEnTabla(nested);
+                }
+            }
+        }
+    }
+
+    private void aplicarFuenteMavenProEnParrafo(XWPFParagraph paragraph) {
+        if (paragraph == null || paragraph.getRuns() == null) {
+            return;
+        }
+        for (XWPFRun run : paragraph.getRuns()) {
+            if (run != null) {
+                run.setFontFamily("Maven Pro");
+            }
         }
     }
 

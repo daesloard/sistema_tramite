@@ -1,4 +1,6 @@
-package com.sistema.tramites.backend;
+package com.sistema.tramites.backend.controladores;
+
+import com.sistema.tramites.backend.*;
 
 import jakarta.validation.Valid;
 import org.apache.poi.ss.usermodel.Row;
@@ -17,6 +19,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Year;
 import java.time.format.DateTimeFormatter;
 import java.text.Normalizer;
 import java.util.Base64;
@@ -29,23 +32,28 @@ import java.util.Optional;
 @RequestMapping("/api/tramites")
 public class TramiteController {
 
+    private static final String DRIVE_PREFIX = "drive:";
+
     private final TramiteRepository tramiteRepository;
     private final WorkingDayCalculator workingDayCalculator;
     private final EmailService emailService;
     private final DocumentoGeneradoService documentoGeneradoService;
     private final UsuarioRepository usuarioRepository;
+    private final DriveStorageService driveStorageService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public TramiteController(TramiteRepository tramiteRepository, 
                            WorkingDayCalculator workingDayCalculator,
                            EmailService emailService,
                            DocumentoGeneradoService documentoGeneradoService,
-                           UsuarioRepository usuarioRepository) {
+                           UsuarioRepository usuarioRepository,
+                           DriveStorageService driveStorageService) {
         this.tramiteRepository = tramiteRepository;
         this.workingDayCalculator = workingDayCalculator;
         this.emailService = emailService;
         this.documentoGeneradoService = documentoGeneradoService;
         this.usuarioRepository = usuarioRepository;
+        this.driveStorageService = driveStorageService;
     }
 
     @GetMapping
@@ -122,36 +130,62 @@ public class TramiteController {
             tramite.setDireccionResidencia(solicitud.getDireccionResidencia());
             tramite.setBarrioResidencia(solicitud.getBarrioResidencia());
             tramite.setTelefono(solicitud.getTelefono());
-            tramite.setCorreoElectronico(solicitud.getCorreoElectronico());
+            tramite.setCorreoElectronico(normalizarCorreo(solicitud.getCorreoElectronico()));
             tramite.setTipo_certificado(solicitud.getTipo_certificado());
             
                 // Guardar documentos en BLOB si se envían
                 if (solicitud.getDocumento_identidad_base64() != null && !solicitud.getDocumento_identidad_base64().isEmpty()) {
                 byte[] documentoIdentidad = Base64.getDecoder()
                     .decode(solicitud.getDocumento_identidad_base64());
-                tramite.setContenidoDocumentoIdentidad(documentoIdentidad);
                 String nombreIdentidad = solicitud.getDocumento_identidad_nombre();
                 String tipoIdentidad = solicitud.getDocumento_identidad_tipo();
+                String nombreFinalIdentidad = nombreIdentidad != null && !nombreIdentidad.isBlank()
+                    ? nombreIdentidad
+                    : "documento_identidad_" + System.currentTimeMillis();
+                String tipoFinalIdentidad = tipoIdentidad != null && !tipoIdentidad.isBlank()
+                    ? tipoIdentidad
+                    : "application/pdf";
                 tramite.setNombreArchivoIdentidad(nombreIdentidad != null && !nombreIdentidad.isBlank()
                     ? nombreIdentidad
                     : "documento_identidad_" + System.currentTimeMillis());
                 tramite.setTipoContenidoIdentidad(tipoIdentidad != null && !tipoIdentidad.isBlank()
                     ? tipoIdentidad
                     : "application/pdf");
+
+                if (driveStorageService.isEnabled()) {
+                    String driveId = driveStorageService.uploadFile(nombreFinalIdentidad, tipoFinalIdentidad, documentoIdentidad);
+                    tramite.setRuta_documento_identidad(DRIVE_PREFIX + driveId);
+                    tramite.setContenidoDocumentoIdentidad(null);
+                } else {
+                    tramite.setContenidoDocumentoIdentidad(documentoIdentidad);
+                }
                 }
 
                 if (solicitud.getDocumento_solicitud_base64() != null && !solicitud.getDocumento_solicitud_base64().isEmpty()) {
                 byte[] documentoSolicitud = Base64.getDecoder()
                     .decode(solicitud.getDocumento_solicitud_base64());
-                tramite.setContenidoDocumentoSolicitud(documentoSolicitud);
                 String nombreSolicitud = solicitud.getDocumento_solicitud_nombre();
                 String tipoSolicitud = solicitud.getDocumento_solicitud_tipo();
+                String nombreFinalSolicitud = nombreSolicitud != null && !nombreSolicitud.isBlank()
+                    ? nombreSolicitud
+                    : "documento_solicitud_" + System.currentTimeMillis();
+                String tipoFinalSolicitud = tipoSolicitud != null && !tipoSolicitud.isBlank()
+                    ? tipoSolicitud
+                    : "application/pdf";
                 tramite.setNombreArchivoSolicitud(nombreSolicitud != null && !nombreSolicitud.isBlank()
                     ? nombreSolicitud
                     : "documento_solicitud_" + System.currentTimeMillis());
                 tramite.setTipoContenidoSolicitud(tipoSolicitud != null && !tipoSolicitud.isBlank()
                     ? tipoSolicitud
                     : "application/pdf");
+
+                if (driveStorageService.isEnabled()) {
+                    String driveId = driveStorageService.uploadFile(nombreFinalSolicitud, tipoFinalSolicitud, documentoSolicitud);
+                    tramite.setRuta_documento_solicitud(DRIVE_PREFIX + driveId);
+                    tramite.setContenidoDocumentoSolicitud(null);
+                } else {
+                    tramite.setContenidoDocumentoSolicitud(documentoSolicitud);
+                }
                 }
 
                 if (solicitud.getCertificado_base64() != null && !solicitud.getCertificado_base64().isEmpty()) {
@@ -166,31 +200,54 @@ public class TramiteController {
                     ? tipoCertificado
                     : "application/pdf";
 
+                String driveIdCertificado = null;
+                if (driveStorageService.isEnabled()) {
+                    driveIdCertificado = driveStorageService.uploadFile(nombreFinal, tipoFinal, certificado);
+                }
+
                 // Respaldo genérico: garantiza disponibilidad del 3er adjunto en correo de radicación
-                tramite.setContenidoDocumentoResidencia(certificado);
+                tramite.setContenidoDocumentoResidencia(driveIdCertificado != null ? null : certificado);
                 tramite.setNombreArchivoResidencia(nombreFinal);
                 tramite.setTipoContenidoResidencia(tipoFinal);
+                if (driveIdCertificado != null) {
+                    tramite.setRuta_certificado(DRIVE_PREFIX + driveIdCertificado);
+                }
 
                 String tipoSeleccionado = solicitud.getTipo_certificado();
                 if ("SISBEN".equalsIgnoreCase(tipoSeleccionado)) {
-                    tramite.setContenidoCertificadoSisben(certificado);
+                    tramite.setContenidoCertificadoSisben(driveIdCertificado != null ? null : certificado);
                     tramite.setNombreArchivoSisben(nombreFinal);
                     tramite.setTipoContenidoSisben(tipoFinal);
+                    if (driveIdCertificado != null) {
+                        tramite.setRuta_certificado_sisben(DRIVE_PREFIX + driveIdCertificado);
+                    }
                 } else if ("ELECTORAL".equalsIgnoreCase(tipoSeleccionado)) {
-                    tramite.setContenidoCertificadoElectoral(certificado);
+                    tramite.setContenidoCertificadoElectoral(driveIdCertificado != null ? null : certificado);
                     tramite.setNombreArchivoElectoral(nombreFinal);
                     tramite.setTipoContenidoElectoral(tipoFinal);
+                    if (driveIdCertificado != null) {
+                        tramite.setRuta_certificado_electoral(DRIVE_PREFIX + driveIdCertificado);
+                    }
                 } else {
-                    tramite.setContenidoDocumentoResidencia(certificado);
+                    tramite.setContenidoDocumentoResidencia(driveIdCertificado != null ? null : certificado);
                     tramite.setNombreArchivoResidencia(nombreFinal);
                     tramite.setTipoContenidoResidencia(tipoFinal);
+                    if (driveIdCertificado != null) {
+                        tramite.setRuta_certificado(DRIVE_PREFIX + driveIdCertificado);
+                    }
                 }
                 }
             
             // Rutas legacy para compatibilidad
-            tramite.setRuta_documento_solicitud("doc_solicitud_" + System.currentTimeMillis());
-            tramite.setRuta_documento_identidad("doc_identidad_" + System.currentTimeMillis());
-            tramite.setRuta_certificado("certificado_" + System.currentTimeMillis());
+            if (tramite.getRuta_documento_solicitud() == null || tramite.getRuta_documento_solicitud().isBlank()) {
+                tramite.setRuta_documento_solicitud("doc_solicitud_" + System.currentTimeMillis());
+            }
+            if (tramite.getRuta_documento_identidad() == null || tramite.getRuta_documento_identidad().isBlank()) {
+                tramite.setRuta_documento_identidad("doc_identidad_" + System.currentTimeMillis());
+            }
+            if (tramite.getRuta_certificado() == null || tramite.getRuta_certificado().isBlank()) {
+                tramite.setRuta_certificado("certificado_" + System.currentTimeMillis());
+            }
             
             // Calcular vencimiento (10 días hábiles)
             LocalDate fechaVencimiento = workingDayCalculator
@@ -206,7 +263,7 @@ public class TramiteController {
             
             // Enviar emails
             emailService.enviarConfirmacionRadicacion(
-                    solicitud.getCorreoElectronico(),
+                    guardado.getCorreoElectronico(),
                     solicitud.getNombre(),
                     guardado.getNumeroRadicado(),
                     fechaVencimiento,
@@ -259,8 +316,21 @@ public class TramiteController {
                 tramite.setUsuarioVerificador(usuarioVerificadorOpt.get());
             }
 
-            if (verificacion.getConsecutivo() != null && !verificacion.getConsecutivo().isBlank()) {
-                tramite.setConsecutivoVerificador(verificacion.getConsecutivo().trim());
+            int anioConsecutivo = Year.now().getValue();
+            String consecutivoIngresado = verificacion.getConsecutivo() == null ? "" : verificacion.getConsecutivo().trim();
+            if (!consecutivoIngresado.isBlank()) {
+                String consecutivoNormalizado = normalizarConsecutivo(consecutivoIngresado);
+                if (consecutivoNormalizado == null) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body("Consecutivo inválido. Debe contener solo números (ej: 001)");
+                }
+                if (consecutivoYaUsadoEnAnio(consecutivoNormalizado, anioConsecutivo, tramite.getId())) {
+                    return ResponseEntity.status(HttpStatus.CONFLICT)
+                            .body("El consecutivo " + consecutivoNormalizado + " ya fue usado en " + anioConsecutivo);
+                }
+                tramite.setConsecutivoVerificador(consecutivoNormalizado);
+            } else if (tramite.getConsecutivoVerificador() == null || tramite.getConsecutivoVerificador().isBlank()) {
+                tramite.setConsecutivoVerificador(generarSiguienteConsecutivo(anioConsecutivo));
             }
             
             if (verificacion.isAprobado()) {
@@ -288,7 +358,15 @@ public class TramiteController {
             }
             
             Tramite actualizado = tramiteRepository.save(tramite);
-            return ResponseEntity.ok(actualizado);
+            var respuesta = new java.util.HashMap<String, Object>();
+            respuesta.put("tramiteId", actualizado.getId());
+            respuesta.put("numeroRadicado", actualizado.getNumeroRadicado());
+            respuesta.put("estado", actualizado.getEstado() != null ? actualizado.getEstado().name() : null);
+            respuesta.put("fechaFirmaAlcalde", actualizado.getFechaFirmaAlcalde());
+            respuesta.put("codigoVerificacion", actualizado.getCodigoVerificacion());
+            respuesta.put("mensaje", "✅ Certificado firmado y emitido correctamente");
+
+            return ResponseEntity.ok(respuesta);
             
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -603,7 +681,8 @@ public class TramiteController {
     }
 
     @GetMapping("/{id}/vista-previa-documento")
-    public ResponseEntity<?> vistaPreviaDocumento(@PathVariable Long id) {
+    public ResponseEntity<?> vistaPreviaDocumento(@PathVariable Long id,
+                                                  @RequestParam(value = "includePdf", defaultValue = "false") boolean includePdf) {
         try {
             Optional<Tramite> optTramite = tramiteRepository.findById(id);
             if (optTramite.isEmpty()) {
@@ -634,14 +713,16 @@ public class TramiteController {
 
             byte[] pdfVistaPrevia = null;
             String errorPdf = null;
-            try {
-                pdfVistaPrevia = documentoGeneradoService.generarPdfDocumento(
-                        tramite,
-                        aprobado,
-                        tramite.getObservaciones()
-                );
-            } catch (Exception ex) {
-                errorPdf = ex.getMessage();
+            if (includePdf) {
+                try {
+                    pdfVistaPrevia = documentoGeneradoService.generarPdfDocumento(
+                            tramite,
+                            aprobado,
+                            tramite.getObservaciones()
+                    );
+                } catch (Exception ex) {
+                    errorPdf = ex.getMessage();
+                }
             }
 
             var respuesta = new java.util.HashMap<String, Object>();
@@ -764,6 +845,69 @@ public class TramiteController {
         }
 
         return false;
+    }
+
+    private String normalizarCorreo(String correo) {
+        if (correo == null) {
+            return null;
+        }
+        String normalizado = correo.trim().toLowerCase(Locale.ROOT);
+        return normalizado.isBlank() ? null : normalizado;
+    }
+
+    private boolean consecutivoYaUsadoEnAnio(String consecutivo, int anio, Long tramiteActualId) {
+        LocalDateTime inicio = LocalDate.of(anio, 1, 1).atStartOfDay();
+        LocalDateTime fin = LocalDate.of(anio + 1, 1, 1).atStartOfDay();
+
+        return tramiteRepository.findAllByFechaRadicacionBetweenAndConsecutivoVerificadorIsNotNull(inicio, fin).stream()
+                .filter(t -> tramiteActualId == null || !Objects.equals(t.getId(), tramiteActualId))
+                .map(Tramite::getConsecutivoVerificador)
+                .map(this::normalizarConsecutivo)
+                .filter(Objects::nonNull)
+                .anyMatch(consecutivo::equals);
+    }
+
+    private String generarSiguienteConsecutivo(int anio) {
+        LocalDateTime inicio = LocalDate.of(anio, 1, 1).atStartOfDay();
+        LocalDateTime fin = LocalDate.of(anio + 1, 1, 1).atStartOfDay();
+
+        int maximo = tramiteRepository.findAllByFechaRadicacionBetweenAndConsecutivoVerificadorIsNotNull(inicio, fin).stream()
+                .map(Tramite::getConsecutivoVerificador)
+                .map(this::normalizarConsecutivo)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::parseInt)
+                .max()
+                .orElse(0);
+
+        return String.format("%03d", maximo + 1);
+    }
+
+    private String normalizarConsecutivo(String valor) {
+        if (valor == null) {
+            return null;
+        }
+
+        String soloNumeros = valor.trim().replaceAll("\\D", "");
+        if (soloNumeros.isBlank()) {
+            return null;
+        }
+
+        int numero;
+        try {
+            numero = Integer.parseInt(soloNumeros);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+
+        if (numero <= 0) {
+            return null;
+        }
+
+        if (numero > 999999) {
+            return null;
+        }
+
+        return String.format("%03d", numero);
     }
 
     private String normalizarTextoComparacion(String valor) {
