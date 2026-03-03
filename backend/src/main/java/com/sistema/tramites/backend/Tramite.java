@@ -77,6 +77,9 @@ public class Tramite {
     private String ruta_certificado;
 
     @Column
+    private String driveFolderId;
+
+    @Column
     private LocalDate fechaVencimiento;
 
     @Column
@@ -315,6 +318,14 @@ public class Tramite {
 
     public void setRuta_certificado(String ruta_certificado) {
         this.ruta_certificado = ruta_certificado;
+    }
+
+    public String getDriveFolderId() {
+        return driveFolderId;
+    }
+
+    public void setDriveFolderId(String driveFolderId) {
+        this.driveFolderId = driveFolderId;
     }
 
     public LocalDate getFechaVencimiento() {

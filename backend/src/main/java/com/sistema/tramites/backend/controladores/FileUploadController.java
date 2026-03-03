@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -120,7 +121,8 @@ public class FileUploadController {
             byte[] contenido = file.getBytes();
             String driveId = null;
             if (driveStorageService.isEnabled()) {
-                driveId = driveStorageService.uploadFile(file.getOriginalFilename(), contentType, contenido);
+                String driveFolderId = obtenerOCrearCarpetaDrive(tramite);
+                driveId = driveStorageService.uploadFileToFolder(file.getOriginalFilename(), contentType, contenido, driveFolderId);
             }
 
             switch (tipo.toLowerCase()) {
@@ -444,6 +446,25 @@ public class FileUploadController {
             return valor.substring(DRIVE_PREFIX.length());
         }
         return null;
+    }
+
+    private String obtenerOCrearCarpetaDrive(Tramite tramite) throws IOException {
+        if (tramite.getDriveFolderId() != null && !tramite.getDriveFolderId().isBlank()) {
+            return tramite.getDriveFolderId();
+        }
+
+        int anio = (tramite.getFechaRadicacion() != null)
+                ? tramite.getFechaRadicacion().getYear()
+                : Year.now().getValue();
+
+        String baseIdentificacion = (tramite.getNumeroDocumento() != null && !tramite.getNumeroDocumento().isBlank())
+                ? tramite.getNumeroDocumento()
+                : (tramite.getNumeroRadicado() != null ? tramite.getNumeroRadicado() : "solicitud");
+
+        String folderId = driveStorageService.createSolicitudFolderByDocumento(baseIdentificacion, anio);
+        tramite.setDriveFolderId(folderId);
+        tramiteRepository.save(tramite);
+        return folderId;
     }
 
     /**
