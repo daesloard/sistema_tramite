@@ -8,6 +8,9 @@ import PanelVerificador from './components/PanelVerificador';
 import PanelAlcalde from './components/PanelAlcalde';
 import Login from './components/Login';
 
+const VISTA_STORAGE_KEY = 'sistema_tramites_vista';
+const VISTAS_VALIDAS = ['inicio', 'radicar', 'verificar', 'login', 'panel'];
+
 const OPCIONES_INICIO = [
   { key: 'radicar', icono: '📝', titulo: 'Radicar Solicitud', descripcion: 'Solicita tu certificado de residencia en línea', boton: 'Empezar', color: '#4CAF50' },
   { key: 'verificar', icono: '🔍', titulo: 'Verificar Certificado', descripcion: 'Consulta el estado de tu solicitud', boton: 'Verificar', color: '#2196F3' },
@@ -266,6 +269,29 @@ export default function App() {
   const [archivoCargaAdmin, setArchivoCargaAdmin] = useState({});
   const [subiendoDocumentoAdminKey, setSubiendoDocumentoAdminKey] = useState('');
 
+  useEffect(() => {
+    const vistaGuardada = localStorage.getItem(VISTA_STORAGE_KEY);
+    if (vistaGuardada && VISTAS_VALIDAS.includes(vistaGuardada)) {
+      setVista(vistaGuardada);
+    }
+
+    const usuarioGuardado = localStorage.getItem('usuario') || localStorage.getItem('user');
+    if (!usuarioGuardado) return;
+
+    try {
+      const usuarioParseado = JSON.parse(usuarioGuardado);
+      if (usuarioParseado?.rol) {
+        setUsuarioActual(usuarioParseado);
+      }
+    } catch (error) {
+      console.warn('No se pudo restaurar la sesión del usuario', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(VISTA_STORAGE_KEY, vista);
+  }, [vista]);
+
   const cargarTramites = useCallback(async () => {
     setLoading(true);
     try {
@@ -413,6 +439,8 @@ export default function App() {
     const destino = vistaLoginDestino || (esVistaProtegida(vista) ? vista : 'panel');
 
     setUsuarioActual(usuario);
+    localStorage.setItem('usuario', JSON.stringify(usuario));
+    localStorage.setItem('user', JSON.stringify(usuario));
     setVista(destino);
   };
 
@@ -664,7 +692,7 @@ export default function App() {
     return (
       <div style={styles.appRadicar}>
         <HeaderConVolver onVolver={() => setVista('inicio')} titulo="Radicar Solicitud" />
-        <FormularioCertificado />
+        <FormularioCertificado onIrAVerificar={() => setVista('verificar')} />
       </div>
     );
   }

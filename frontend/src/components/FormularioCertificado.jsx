@@ -153,7 +153,7 @@ const styles = {
   li: { marginBottom: '0.75rem', lineHeight: 1.5 },
 };
 
-export default function FormularioCertificado() {
+export default function FormularioCertificado({ onIrAVerificar }) {
   const [paso, setPaso] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -718,8 +718,12 @@ export default function FormularioCertificado() {
               Realizar Nueva Solicitud
             </button>
             <button style={styles.botonPrimario} onClick={() => {
-              // Aquí iría la lógica para ir al portal de consulta de estado
-              window.open('/verificar/' + radicacion.numeroRadicado, '_self');
+              if (typeof onIrAVerificar === 'function') {
+                onIrAVerificar();
+                return;
+              }
+              localStorage.setItem('sistema_tramites_vista', 'verificar');
+              window.location.assign('/');
             }}>
               Consultar Estado
             </button>
