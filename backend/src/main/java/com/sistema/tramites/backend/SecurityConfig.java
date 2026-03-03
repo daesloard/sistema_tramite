@@ -35,7 +35,8 @@ public class SecurityConfig {
             "http://127.0.0.1:*",
             "http://192.168.*:*",
             "http://10.*:*",
-            "http://172.*:*"
+            "http://172.*:*",
+            "https://*.pages.dev"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
