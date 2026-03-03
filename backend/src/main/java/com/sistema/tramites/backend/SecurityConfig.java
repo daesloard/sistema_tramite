@@ -36,6 +36,8 @@ public class SecurityConfig {
             "http://192.168.*:*",
             "http://10.*:*",
             "http://172.*:*",
+            "https://sistema-tramite.pages.dev",
+            "https://*.sistema-tramite.pages.dev",
             "https://*.pages.dev"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

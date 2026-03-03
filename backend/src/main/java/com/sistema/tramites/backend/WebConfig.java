@@ -16,6 +16,8 @@ public class WebConfig implements WebMvcConfigurer {
                 "http://192.168.*:*",
                 "http://10.*:*",
                 "http://172.*:*",
+                "https://sistema-tramite.pages.dev",
+                "https://*.sistema-tramite.pages.dev",
                 "https://*.pages.dev"
             )
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
