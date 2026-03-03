@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Async;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import jakarta.mail.internet.MimeMessage;
@@ -28,6 +29,12 @@ public class EmailService {
     @Value("${app.mail.attachments.on-radicacion:false}")
     private boolean adjuntarSoportesEnRadicacion;
 
+    @Value("${app.mail.max-attempts:3}")
+    private int maxIntentosEnvio;
+
+    @Value("${app.mail.retry-delay-ms:700}")
+    private long esperaReintentoMs;
+
     @Autowired
     public EmailService(JavaMailSender mailSender) {
         this.mailSender = mailSender;
@@ -41,6 +48,7 @@ public class EmailService {
         enviarConfirmacionRadicacion(correoDestino, nombre, numeroRadicado, fechaVencimiento, null);
     }
 
+    @Async("mailTaskExecutor")
     public void enviarConfirmacionRadicacion(String correoDestino, String nombre,
                                              String numeroRadicado, LocalDate fechaVencimiento,
                                              Tramite tramite) {
@@ -93,8 +101,10 @@ public class EmailService {
                     }
                     }
 
-                    mailSender.send(mimeMessage);
-            logger.info("✅ Email de confirmación enviado exitosamente a: {}", destino);
+            boolean enviado = enviarConReintento(() -> mailSender.send(mimeMessage), "confirmación", destino, numeroRadicado);
+            if (enviado) {
+                logger.info("✅ Email de confirmación enviado exitosamente a: {}", destino);
+            }
             
         } catch (Exception e) {
             logger.error("❌ Error al enviar email de confirmación: {}", e.getMessage(), e);
@@ -104,6 +114,7 @@ public class EmailService {
     /**
      * Envía email al verificador notificando nueva solicitud
      */
+    @Async("mailTaskExecutor")
     public void enviarNotificacionVerificador(String correoVerificador, String numeroRadicado, 
                                               String nombreSolicitante) {
         try {
@@ -128,14 +139,17 @@ public class EmailService {
                     "Ventanilla Virtual";
             
             mensaje.setText(contenido);
-            mailSender.send(mensaje);
-            logger.info("✅ Notificación de verificación enviada a: {}", destino);
+            boolean enviado = enviarConReintento(() -> mailSender.send(mensaje), "notificación verificador", destino, numeroRadicado);
+            if (enviado) {
+                logger.info("✅ Notificación de verificación enviada a: {}", destino);
+            }
             
         } catch (Exception e) {
             logger.error("❌ Error al enviar email de verificador: {}", e.getMessage(), e);
         }
     }
 
+    @Async("mailTaskExecutor")
     public void enviarNotificacionAdminRevisionDocumentos(
             String[] correosAdmin,
             String numeroRadicado,
@@ -174,8 +188,10 @@ public class EmailService {
                     + "Ventanilla Virtual";
 
             mensaje.setText(contenido);
-            mailSender.send(mensaje);
-            logger.info("✅ Notificación de revisión documental enviada a administradores");
+            boolean enviado = enviarConReintento(() -> mailSender.send(mensaje), "notificación administradores", String.join(",", correosAdmin), numeroRadicado);
+            if (enviado) {
+                logger.info("✅ Notificación de revisión documental enviada a administradores");
+            }
         } catch (Exception e) {
             logger.error("❌ Error al enviar notificación a administradores: {}", e.getMessage(), e);
         }
@@ -189,6 +205,7 @@ public class EmailService {
         enviarDocumentoFinal(correoDestino, nombre, numeroRadicado, aprobado, observaciones, null, null);
     }
 
+    @Async("mailTaskExecutor")
     public void enviarDocumentoFinal(String correoDestino, String nombre, String numeroRadicado,
                                      boolean aprobado, String observaciones,
                                      byte[] adjuntoPdf, String nombreAdjunto) {
@@ -235,12 +252,44 @@ public class EmailService {
                 logger.warn("⚠️ PDF final no adjunto por tamaño ({}) para radicado={}", adjuntoPdf.length, numeroRadicado);
             }
 
-            mailSender.send(mimeMessage);
-            logger.info("✅ Email de resultado ({}) enviado a: {}", estado, destino);
+            boolean enviado = enviarConReintento(() -> mailSender.send(mimeMessage), "resultado " + estado, destino, numeroRadicado);
+            if (enviado) {
+                logger.info("✅ Email de resultado ({}) enviado a: {}", estado, destino);
+            }
             
         } catch (Exception e) {
             logger.error("❌ Error al enviar email de resultado: {}", e.getMessage(), e);
         }
+    }
+
+    private boolean enviarConReintento(Runnable envio, String tipo, String destino, String radicado) {
+        int intentos = Math.max(1, maxIntentosEnvio);
+        for (int intento = 1; intento <= intentos; intento++) {
+            try {
+                envio.run();
+                return true;
+            } catch (Exception ex) {
+                logger.error("❌ Fallo envío {} intento {}/{} destino={} radicado={} causa={} mensaje={}",
+                        tipo,
+                        intento,
+                        intentos,
+                        destino,
+                        radicado,
+                        ex.getClass().getSimpleName(),
+                        ex.getMessage(),
+                        ex);
+
+                if (intento < intentos) {
+                    try {
+                        Thread.sleep(Math.max(100, esperaReintentoMs));
+                    } catch (InterruptedException interruptedException) {
+                        Thread.currentThread().interrupt();
+                        return false;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private String obtenerRemitente() {
