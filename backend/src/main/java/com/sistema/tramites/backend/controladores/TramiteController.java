@@ -289,6 +289,14 @@ public class TramiteController {
             respuesta.put("fechaSolicitud", guardado.getFechaRadicacion());
             respuesta.put("fechaVencimiento", fechaVencimiento);
             respuesta.put("estado", "RADICADO");
+                respuesta.put("driveHabilitado", driveStorageService.isEnabled());
+                respuesta.put("driveFolderId", guardado.getDriveFolderId());
+                respuesta.put("almacenamientoIdentidad", extraerDriveFileId(guardado.getRuta_documento_identidad()) != null ? "DRIVE" : "BD");
+                respuesta.put("almacenamientoSolicitud", extraerDriveFileId(guardado.getRuta_documento_solicitud()) != null ? "DRIVE" : "BD");
+                respuesta.put("almacenamientoCertificado", extraerDriveFileId(guardado.getRuta_certificado()) != null
+                    || extraerDriveFileId(guardado.getRuta_certificado_sisben()) != null
+                    || extraerDriveFileId(guardado.getRuta_certificado_electoral()) != null
+                    ? "DRIVE" : "BD");
             respuesta.put("mensaje", "Solicitud radicada exitosamente");
 
             return ResponseEntity.status(HttpStatus.CREATED).body(respuesta);
@@ -951,6 +959,17 @@ public class TramiteController {
         String sufijo = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyMMddHHmmss"));
         String prefijo = base.length() <= 8 ? base : base.substring(base.length() - 8);
         return prefijo + "-" + sufijo;
+    }
+
+    private String extraerDriveFileId(String ruta) {
+        if (ruta == null) {
+            return null;
+        }
+        String valor = ruta.trim();
+        if (valor.startsWith(DRIVE_PREFIX) && valor.length() > DRIVE_PREFIX.length()) {
+            return valor.substring(DRIVE_PREFIX.length());
+        }
+        return null;
     }
 
     private String calcularHashSha256(byte[] contenido) {

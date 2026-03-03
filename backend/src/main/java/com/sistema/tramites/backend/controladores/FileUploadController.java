@@ -165,7 +165,10 @@ public class FileUploadController {
             return ResponseEntity.ok(new UploadResponseDTO(
                     true,
                     "✅ Archivo " + tipo + " cargado exitosamente",
-                    tramite.getId()
+                    tramite.getId(),
+                    driveId != null ? "DRIVE" : "BD",
+                    tramite.getDriveFolderId(),
+                    driveId
             ));
 
         } catch (IOException e) {
@@ -523,11 +526,18 @@ public class FileUploadController {
         public boolean success;
         public String message;
         public Long tramiteId;
+        public String almacenamiento;
+        public String driveFolderId;
+        public String driveFileId;
 
-        public UploadResponseDTO(boolean success, String message, Long tramiteId) {
+        public UploadResponseDTO(boolean success, String message, Long tramiteId,
+                                 String almacenamiento, String driveFolderId, String driveFileId) {
             this.success = success;
             this.message = message;
             this.tramiteId = tramiteId;
+            this.almacenamiento = almacenamiento;
+            this.driveFolderId = driveFolderId;
+            this.driveFileId = driveFileId;
         }
     }
 
