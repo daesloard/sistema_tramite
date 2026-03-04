@@ -27,6 +27,7 @@ import java.util.regex.Pattern;
 public class DriveStorageService {
 
     private static final String APP_NAME = "sistema-tramites";
+    private static final String CERTIFICADOS_FIRMADOS_FOLDER_NAME = "CERTIFICADOS FIRMADOS";
 
     @Value("${app.storage.drive.enabled:false}")
     private boolean driveEnabled;
@@ -38,6 +39,7 @@ public class DriveStorageService {
     private String folderId;
 
     private volatile Drive driveClient;
+    private volatile String certificadosFirmadosFolderId;
 
     public boolean isEnabled() {
         return driveEnabled && credentialsJsonBase64 != null && !credentialsJsonBase64.isBlank();
@@ -124,6 +126,11 @@ public class DriveStorageService {
         }
     }
 
+    public String uploadSignedCertificate(String fileName, String contentType, byte[] bytes) throws IOException {
+        String targetFolderId = getOrCreateSignedCertificatesFolder();
+        return uploadFileToFolder(fileName, contentType, bytes, targetFolderId);
+    }
+
     public String createSolicitudFolderByDocumento(String numeroDocumento, int year) throws IOException {
         if (!isEnabled()) {
             throw new IllegalStateException("Google Drive storage no está habilitado");
@@ -163,6 +170,57 @@ public class DriveStorageService {
                 .setFields("id")
                 .execute();
         return createdFolder.getId();
+    }
+
+    private String getOrCreateSignedCertificatesFolder() throws IOException {
+        if (!isEnabled()) {
+            throw new IllegalStateException("Google Drive storage no está habilitado");
+        }
+
+        String folderCache = certificadosFirmadosFolderId;
+        if (folderCache != null && !folderCache.isBlank()) {
+            return folderCache;
+        }
+
+        try {
+            Drive drive = getDriveClient();
+            synchronized (this) {
+                if (certificadosFirmadosFolderId != null && !certificadosFirmadosFolderId.isBlank()) {
+                    return certificadosFirmadosFolderId;
+                }
+
+                String existente = findFolderIdByExactName(drive, CERTIFICADOS_FIRMADOS_FOLDER_NAME);
+                if (existente != null && !existente.isBlank()) {
+                    certificadosFirmadosFolderId = existente;
+                    return certificadosFirmadosFolderId;
+                }
+
+                certificadosFirmadosFolderId = createFolder(drive, CERTIFICADOS_FIRMADOS_FOLDER_NAME);
+                return certificadosFirmadosFolderId;
+            }
+        } catch (GeneralSecurityException e) {
+            throw new IOException("No fue posible inicializar cliente de Google Drive", e);
+        }
+    }
+
+    private String findFolderIdByExactName(Drive drive, String folderName) throws IOException {
+        String query = baseFolderQuery()
+                + " and mimeType = 'application/vnd.google-apps.folder'"
+                + " and name = '" + escapeQueryValue(folderName) + "'";
+
+        com.google.api.services.drive.model.FileList files = drive.files()
+                .list()
+                .setQ(query)
+                .setPageSize(1)
+                .setIncludeItemsFromAllDrives(true)
+                .setSupportsAllDrives(true)
+                .setFields("files(id)")
+                .execute();
+
+        if (files.getFiles() == null || files.getFiles().isEmpty()) {
+            return null;
+        }
+        return files.getFiles().get(0).getId();
     }
 
     private boolean folderExistsByName(Drive drive, String folderName) throws IOException {
