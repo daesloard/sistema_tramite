@@ -66,6 +66,10 @@ const styles = {
   },
   panelListaDesktop: { position: 'sticky', top: '20px' },
   h3Lista: { margin: '0 0 15px 0', fontSize: '16px', color: '#2c3e50' },
+  busquedaWrap: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' },
+  busquedaInput: { width: 'min(380px, 100%)', border: '1px solid #cfd8dc', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', boxSizing: 'border-box' },
+  busquedaMeta: { margin: 0, fontSize: '12px', color: '#6b7280' },
+  busquedaBtn: { padding: '0.35rem 0.75rem', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', width: 'auto', whiteSpace: 'nowrap' },
   listaVacia: { textAlign: 'center', padding: '30px 10px', color: '#27ae60' },
   subtexto: { color: '#95a5a6', fontSize: '12px', margin: '8px 0 0 0' },
   listaSolicitudes: { display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' },
@@ -160,6 +164,24 @@ const styles = {
   certMeta: { margin: '2px 0', fontSize: '12px', color: '#4b5563' },
   seccionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.8rem', marginBottom: '10px', flexWrap: 'wrap' },
   btnToggleSeccion: { padding: '0.35rem 0.75rem', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', width: 'auto', whiteSpace: 'nowrap' },
+  avisoOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(17, 24, 39, 0.35)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '16px',
+    zIndex: 120,
+  },
+  panelAviso: { width: 'min(92vw, 520px)', padding: '14px 16px', borderRadius: '10px', border: '1px solid transparent', boxShadow: '0 10px 30px rgba(0,0,0,0.22)' },
+  panelAvisoTexto: { margin: 0, fontSize: '14px', fontWeight: 600, lineHeight: 1.45 },
+  panelAvisoAcciones: { marginTop: '12px', display: 'flex', justifyContent: 'flex-end' },
+  panelAvisoCerrar: { border: 'none', background: '#1f2937', color: '#fff', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, lineHeight: 1, padding: '8px 10px' },
+  panelAvisoError: { background: '#ffebee', borderColor: '#ef5350', color: '#b71c1c' },
+  panelAvisoExito: { background: '#e8f5e9', borderColor: '#81c784', color: '#1b5e20' },
+  panelAvisoInfo: { background: '#e3f2fd', borderColor: '#64b5f6', color: '#0d47a1' },
+  panelAvisoWarning: { background: '#fff4e5', borderColor: '#f59e0b', color: '#92400e' },
 };
 
 const getEstadoBadge = (estado) => {
@@ -191,6 +213,7 @@ export default function PanelAlcalde() {
   const [selectedSolicitud, setSelectedSolicitud] = useState(null);
   const [firmaDigital, setFirmaDigital] = useState('');
   const [filtroVista, setFiltroVista] = useState('pendientes');
+  const [busquedaSolicitudes, setBusquedaSolicitudes] = useState('');
   const [vistaPrevia, setVistaPrevia] = useState('');
   const [vistaPreviaHtml, setVistaPreviaHtml] = useState('');
   const [vistaPreviaPdf, setVistaPreviaPdf] = useState('');
@@ -201,6 +224,18 @@ export default function PanelAlcalde() {
   const [filtroCertNombre, setFiltroCertNombre] = useState('');
   const [filtroCertTipo, setFiltroCertTipo] = useState('todos');
   const [certificadosExpandido, setCertificadosExpandido] = useState(false);
+  const [avisoPanel, setAvisoPanel] = useState(null);
+
+  const mostrarAvisoPanel = (tipo, mensaje) => {
+    setAvisoPanel({ tipo, mensaje });
+  };
+
+  const obtenerEstiloAvisoPanel = (tipo) => {
+    if (tipo === 'success') return styles.panelAvisoExito;
+    if (tipo === 'warning') return styles.panelAvisoWarning;
+    if (tipo === 'info') return styles.panelAvisoInfo;
+    return styles.panelAvisoError;
+  };
 
   useEffect(() => {
     cargarSolicitudes();
@@ -228,6 +263,21 @@ export default function PanelAlcalde() {
     () => solicitudes.filter((s) => s.estado === filtroActual.estado),
     [solicitudes, filtroActual]
   );
+  const textoBusquedaSolicitudes = busquedaSolicitudes.trim().toLowerCase();
+  const solicitudesFiltradasBusqueda = useMemo(() => {
+    if (!textoBusquedaSolicitudes) return solicitudesFiltradas;
+    return solicitudesFiltradas.filter((solicitud) => {
+      const campos = [
+        solicitud?.numeroRadicado,
+        solicitud?.nombreSolicitante,
+        solicitud?.numeroDocumento,
+        solicitud?.estado,
+        solicitud?.tipoTramite,
+        solicitud?.tipo_certificado,
+      ];
+      return campos.some((valor) => (valor || '').toString().toLowerCase().includes(textoBusquedaSolicitudes));
+    });
+  }, [solicitudesFiltradas, textoBusquedaSolicitudes]);
 
   const certificadosGeneradosFiltrados = useMemo(() => {
     const base = solicitudes.filter((s) => s.estado === 'FINALIZADO' || s.estado === 'RECHAZADO');
@@ -260,7 +310,20 @@ export default function PanelAlcalde() {
   const cargarVistaPrevia = async (tramiteId) => {
     setLoadingVistaPrevia(true);
     try {
-      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/vista-previa-documento?includePdf=false`);
+      let headers = {};
+      try {
+        const userGuardado = localStorage.getItem('user');
+        const user = userGuardado ? JSON.parse(userGuardado) : null;
+        if (user?.username) {
+          headers = { 'X-Username': user.username };
+        }
+      } catch {
+        headers = {};
+      }
+
+      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/vista-previa-documento?includePdf=false`, {
+        headers,
+      });
       if (!response.ok) throw new Error('No se pudo cargar la vista previa');
       const data = await response.json();
       setVistaPrevia(data.contenido || '');
@@ -277,7 +340,7 @@ export default function PanelAlcalde() {
 
   const handleFirmar = async () => {
     if (!selectedSolicitud || !firmaDigital.trim()) {
-      alert('Por favor, ingresa la contraseña para firmar');
+      mostrarAvisoPanel('warning', 'Por favor, ingresa la contraseña para firmar');
       return;
     }
 
@@ -297,12 +360,12 @@ export default function PanelAlcalde() {
         throw new Error(msg || 'Error al firmar. Verifica la contraseña.');
       }
 
-      alert('✅ Certificado firmado exitosamente. Se enviará al solicitante.');
+      mostrarAvisoPanel('success', 'Certificado firmado exitosamente. Se enviará al solicitante.');
       setSelectedSolicitud(null);
       setFirmaDigital('');
       await cargarSolicitudes();
     } catch (err) {
-      alert(`❌ Error: ${err.message}`);
+      mostrarAvisoPanel('error', `Error: ${err.message}`);
     } finally {
       setProcesando(false);
     }
@@ -335,6 +398,17 @@ export default function PanelAlcalde() {
       {error ? (
         <div style={styles.panelError}>
           <p style={{ margin: 0 }}>⚠️ {error}</p>
+        </div>
+      ) : null}
+
+      {avisoPanel ? (
+        <div style={styles.avisoOverlay} onClick={() => setAvisoPanel(null)}>
+          <div style={{ ...styles.panelAviso, ...obtenerEstiloAvisoPanel(avisoPanel.tipo) }} onClick={(e) => e.stopPropagation()}>
+            <p style={styles.panelAvisoTexto}>{avisoPanel.mensaje}</p>
+            <div style={styles.panelAvisoAcciones}>
+              <button style={styles.panelAvisoCerrar} onClick={() => setAvisoPanel(null)} aria-label="Cerrar aviso">Entendido</button>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -388,17 +462,36 @@ export default function PanelAlcalde() {
       <div style={{ ...styles.panelContenido, ...(isMobile ? styles.panelContenidoMobile : styles.panelContenidoDesktop) }}>
         <div style={{ ...styles.panelLista, ...(isMobile ? {} : styles.panelListaDesktop) }}>
           <h3 style={styles.h3Lista}>
-            {filtroActual.titulo} ({solicitudesFiltradas.length})
+            {filtroActual.titulo} ({solicitudesFiltradasBusqueda.length})
           </h3>
+
+          <div style={styles.busquedaWrap}>
+            <input
+              style={styles.busquedaInput}
+              placeholder="Buscar por radicado, solicitante, documento, estado o tipo..."
+              value={busquedaSolicitudes}
+              onChange={(e) => setBusquedaSolicitudes(e.target.value)}
+            />
+            {busquedaSolicitudes.trim() ? (
+              <button style={styles.busquedaBtn} onClick={() => setBusquedaSolicitudes('')}>
+                Limpiar
+              </button>
+            ) : null}
+            <p style={styles.busquedaMeta}>Mostrando {solicitudesFiltradasBusqueda.length} de {solicitudesFiltradas.length}</p>
+          </div>
 
           {solicitudesFiltradas.length === 0 ? (
             <div style={styles.listaVacia}>
               <p style={{ margin: '8px 0', fontSize: '14px' }}>No hay solicitudes para esta vista</p>
               <p style={styles.subtexto}>Selecciona otro filtro para revisar el historial</p>
             </div>
+          ) : solicitudesFiltradasBusqueda.length === 0 ? (
+            <div style={styles.listaVacia}>
+              <p style={{ margin: '8px 0', fontSize: '14px' }}>No hay solicitudes que coincidan con la búsqueda</p>
+            </div>
           ) : (
             <div style={{ ...styles.listaSolicitudes, ...(isMobile ? styles.listaSolicitudesMobile : styles.listaSolicitudesDesktop) }}>
-              {solicitudesFiltradas.map((solicitud) => (
+              {solicitudesFiltradasBusqueda.map((solicitud) => (
                 <div
                   key={solicitud.id}
                   style={{ ...styles.solicitudItem, ...(selectedSolicitud?.id === solicitud.id ? styles.solicitudActiva : {}) }}

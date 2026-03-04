@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -25,15 +26,21 @@ public class FileUploadController {
     private final UsuarioRepository usuarioRepository;
     private final EmailService emailService;
     private final DriveStorageService driveStorageService;
+    private final AuditoriaTramiteService auditoriaTramiteService;
+    private final NotificacionUsuarioService notificacionUsuarioService;
 
     public FileUploadController(TramiteRepository tramiteRepository,
                                 UsuarioRepository usuarioRepository,
                                 EmailService emailService,
-                                DriveStorageService driveStorageService) {
+                                DriveStorageService driveStorageService,
+                                AuditoriaTramiteService auditoriaTramiteService,
+                                NotificacionUsuarioService notificacionUsuarioService) {
         this.tramiteRepository = tramiteRepository;
         this.usuarioRepository = usuarioRepository;
         this.emailService = emailService;
         this.driveStorageService = driveStorageService;
+        this.auditoriaTramiteService = auditoriaTramiteService;
+        this.notificacionUsuarioService = notificacionUsuarioService;
     }
 
     /**
@@ -161,14 +168,25 @@ public class FileUploadController {
                     return ResponseEntity.badRequest().body("❌ Tipo de documento no válido");
             }
 
-            tramiteRepository.save(tramite);
+                Tramite actualizado = tramiteRepository.save(tramite);
+
+                String accion = "DOCUMENTO_CARGADO_" + tipo.toUpperCase(Locale.ROOT);
+                String almacenamiento = driveId != null ? "DRIVE" : "BD";
+                auditoriaTramiteService.registrarEvento(
+                    actualizado.getId(),
+                    null,
+                    accion,
+                    "Carga de " + tipo + " en " + almacenamiento + " para radicado " + actualizado.getNumeroRadicado(),
+                    actualizado.getEstado(),
+                    actualizado.getEstado()
+                );
 
             return ResponseEntity.ok(new UploadResponseDTO(
                     true,
                     "✅ Archivo " + tipo + " cargado exitosamente",
-                    tramite.getId(),
+                    actualizado.getId(),
                     driveId != null ? "DRIVE" : "BD",
-                    tramite.getDriveFolderId(),
+                    actualizado.getDriveFolderId(),
                     driveId
             ));
 
@@ -187,7 +205,10 @@ public class FileUploadController {
     @GetMapping("/{id}/descargar/{tipo}")
     public ResponseEntity<?> descargarDocumento(
             @PathVariable Long id,
-            @PathVariable String tipo) {
+            @PathVariable String tipo,
+            @RequestParam(value = "accion", required = false) String accion,
+            @RequestHeader(value = "X-Username", required = false) String usernameHeader,
+            @RequestHeader(value = "X-Admin-Username", required = false) String adminUsernameHeader) {
         try {
             Optional<Tramite> tramiteOpt = tramiteRepository.findById(id);
             if (tramiteOpt.isEmpty()) {
@@ -246,6 +267,19 @@ public class FileUploadController {
                         .body("❌ No hay archivo de " + tipo + " cargado");
             }
 
+                Long usuarioId = resolverUsuarioIdPorHeaders(usernameHeader, adminUsernameHeader);
+                String tipoNormalizado = (tipo == null ? "documento" : tipo.trim().toUpperCase(Locale.ROOT));
+                String accionAuditoria = resolverAccionDocumento("DOCUMENTO", tipoNormalizado, accion);
+                String almacenamiento = driveFileId != null ? "DRIVE" : "BD";
+                auditoriaTramiteService.registrarEvento(
+                    tramite.getId(),
+                    usuarioId,
+                    accionAuditoria,
+                    "Acceso a " + tipoNormalizado + " en " + almacenamiento + " (archivo: " + (nombreArchivo == null ? "N/A" : nombreArchivo) + ")",
+                    tramite.getEstado(),
+                    tramite.getEstado()
+                );
+
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION,
                             "attachment; filename=\"" + nombreArchivo + "\"")
@@ -262,7 +296,10 @@ public class FileUploadController {
      * Verificar estado de documentos de un trámite
      */
     @GetMapping("/{id}/verificar-documentos")
-    public ResponseEntity<?> verificarDocumentos(@PathVariable Long id) {
+    public ResponseEntity<?> verificarDocumentos(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-Username", required = false) String usernameHeader,
+            @RequestHeader(value = "X-Admin-Username", required = false) String adminUsernameHeader) {
         try {
             Optional<Tramite> tramiteOpt = tramiteRepository.findById(id);
             if (tramiteOpt.isEmpty()) {
@@ -333,11 +370,33 @@ public class FileUploadController {
             verificacion.tramiteId = tramite.getId();
             verificacion.driveHabilitado = driveStorageService.isEnabled();
             verificacion.driveFolderId = tramite.getDriveFolderId();
+            String rutaCertificadoFinal = tramite.getRuta_certificado_final();
+            String driveFileIdCertificadoFinal = extraerDriveFileId(rutaCertificadoFinal);
+            boolean certificadoGeneradoEnBd = tieneContenido(tramite.getContenidoPdfGenerado());
+            verificacion.certificadoGeneradoDisponible = certificadoGeneradoEnBd || driveFileIdCertificadoFinal != null;
+            verificacion.certificadoGeneradoAlmacenamiento = driveFileIdCertificadoFinal != null
+                    ? "DRIVE"
+                    : (certificadoGeneradoEnBd ? "BD" : "NINGUNO");
+            verificacion.certificadoGeneradoDriveFileId = driveFileIdCertificadoFinal;
+            verificacion.certificadoGeneradoNombre = tramite.getNombrePdfGenerado();
+            verificacion.rutaCertificadoFinal = rutaCertificadoFinal;
                 String claveCertificado = resolverClaveCertificado(tramite.getTipo_certificado());
                 verificacion.totalDocumentosCargados =
                     (tieneContenidoOStorage(tramite.getContenidoDocumentoIdentidad(), tramite.getRuta_documento_identidad()) ? 1 : 0) +
                     (tieneContenidoOStorage(tramite.getContenidoDocumentoSolicitud(), tramite.getRuta_documento_solicitud()) ? 1 : 0) +
                     (documentoCertificadoCargado(tramite, claveCertificado) ? 1 : 0);
+
+            Long usuarioId = resolverUsuarioIdPorHeaders(usernameHeader, adminUsernameHeader);
+            if (usuarioId != null) {
+                auditoriaTramiteService.registrarEvento(
+                        tramite.getId(),
+                        usuarioId,
+                        "DOCUMENTOS_CONSULTADOS",
+                        "Consulta de estado documental del trámite",
+                        tramite.getEstado(),
+                        tramite.getEstado()
+                );
+            }
 
             return ResponseEntity.ok(verificacion);
 
@@ -387,6 +446,7 @@ public class FileUploadController {
             String[] correosAdmin = adminsActivos.stream()
                     .map(Usuario::getEmail)
                     .filter(email -> email != null && !email.isBlank())
+                    .map(email -> email.trim().toLowerCase(Locale.ROOT))
                     .distinct()
                     .toArray(String[]::new);
 
@@ -398,6 +458,9 @@ public class FileUploadController {
             String usernameVerificador = (request == null || request.username == null || request.username.isBlank())
                     ? "verificador"
                     : request.username.trim();
+                Long usuarioVerificadorId = usuarioRepository.findByUsernameAndRolAndActivoTrue(usernameVerificador, RolUsuario.VERIFICADOR)
+                    .map(Usuario::getId)
+                    .orElse(null);
 
             String detalleFaltantes = faltantes.isEmpty() ? "NINGUNO" : String.join(", ", faltantes);
 
@@ -412,6 +475,34 @@ public class FileUploadController {
                     detalleFaltantes,
                     request != null ? request.mensaje : null
             );
+
+                    List<Long> adminIds = adminsActivos.stream()
+                        .map(Usuario::getId)
+                        .filter(java.util.Objects::nonNull)
+                        .distinct()
+                        .toList();
+
+                    String mensajeNotificacion = "El verificador " + usernameVerificador
+                        + " solicitó revisión documental del trámite " + tramite.getNumeroRadicado()
+                        + ". Faltantes: " + detalleFaltantes;
+                    String tipoNotificacion = faltantes.isEmpty() ? "INFO" : "WARNING";
+
+                    notificacionUsuarioService.crearParaUsuarios(
+                        adminIds,
+                        tramite.getId(),
+                        "Revisión documental solicitada",
+                        mensajeNotificacion,
+                        tipoNotificacion
+                    );
+
+                    auditoriaTramiteService.registrarEvento(
+                        tramite.getId(),
+                        usuarioVerificadorId,
+                        "NOTIFICACION_ADMIN_DOCUMENTOS",
+                        "Notificación a " + correosAdmin.length + " admin(s). Faltantes: " + detalleFaltantes,
+                        tramite.getEstado(),
+                        tramite.getEstado()
+                    );
 
             var respuesta = new java.util.HashMap<String, Object>();
             respuesta.put("ok", true);
@@ -489,6 +580,34 @@ public class FileUploadController {
             return valor.substring(DRIVE_PREFIX.length());
         }
         return null;
+    }
+
+    private Long resolverUsuarioIdPorHeaders(String usernameHeader, String adminUsernameHeader) {
+        String username = null;
+        if (usernameHeader != null && !usernameHeader.isBlank()) {
+            username = usernameHeader.trim();
+        } else if (adminUsernameHeader != null && !adminUsernameHeader.isBlank()) {
+            username = adminUsernameHeader.trim();
+        }
+
+        if (username == null || username.isBlank()) {
+            return null;
+        }
+
+        return usuarioRepository.findByUsername(username)
+                .map(Usuario::getId)
+                .orElse(null);
+    }
+
+    private String resolverAccionDocumento(String prefijo, String tipo, String accion) {
+        String accionNormalizada = accion == null ? "" : accion.trim().toLowerCase(Locale.ROOT);
+        if ("ver".equals(accionNormalizada) || "visualizar".equals(accionNormalizada) || "open".equals(accionNormalizada)) {
+            return prefijo + "_VISUALIZADO_" + tipo;
+        }
+        if ("descargar".equals(accionNormalizada) || "download".equals(accionNormalizada)) {
+            return prefijo + "_DESCARGADO_" + tipo;
+        }
+        return prefijo + "_ACCESO_" + tipo;
     }
 
     private String obtenerOCrearCarpetaDrive(Tramite tramite) throws IOException {
@@ -589,6 +708,11 @@ public class FileUploadController {
         public int totalDocumentosCargados;
         public boolean driveHabilitado;
         public String driveFolderId;
+        public boolean certificadoGeneradoDisponible;
+        public String certificadoGeneradoAlmacenamiento;
+        public String certificadoGeneradoDriveFileId;
+        public String certificadoGeneradoNombre;
+        public String rutaCertificadoFinal;
     }
 
     public static class NotificacionAdminRequestDTO {

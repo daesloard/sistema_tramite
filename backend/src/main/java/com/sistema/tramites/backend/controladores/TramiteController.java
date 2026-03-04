@@ -23,10 +23,14 @@ import java.time.Year;
 import java.time.format.DateTimeFormatter;
 import java.text.Normalizer;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/tramites")
@@ -40,6 +44,8 @@ public class TramiteController {
     private final DocumentoGeneradoService documentoGeneradoService;
     private final UsuarioRepository usuarioRepository;
     private final DriveStorageService driveStorageService;
+    private final AuditoriaTramiteService auditoriaTramiteService;
+    private final NotificacionUsuarioService notificacionUsuarioService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public TramiteController(TramiteRepository tramiteRepository, 
@@ -47,13 +53,17 @@ public class TramiteController {
                            EmailService emailService,
                            DocumentoGeneradoService documentoGeneradoService,
                            UsuarioRepository usuarioRepository,
-                           DriveStorageService driveStorageService) {
+                           DriveStorageService driveStorageService,
+                           AuditoriaTramiteService auditoriaTramiteService,
+                           NotificacionUsuarioService notificacionUsuarioService) {
         this.tramiteRepository = tramiteRepository;
         this.workingDayCalculator = workingDayCalculator;
         this.emailService = emailService;
         this.documentoGeneradoService = documentoGeneradoService;
         this.usuarioRepository = usuarioRepository;
         this.driveStorageService = driveStorageService;
+        this.auditoriaTramiteService = auditoriaTramiteService;
+        this.notificacionUsuarioService = notificacionUsuarioService;
     }
 
     @GetMapping
@@ -265,6 +275,30 @@ public class TramiteController {
             
             // Guardar en BD
             Tramite guardado = tramiteRepository.save(tramite);
+
+                auditoriaTramiteService.registrarEvento(
+                    guardado.getId(),
+                    null,
+                    "RADICACION_CREADA",
+                    "Se radica solicitud " + guardado.getNumeroRadicado(),
+                    null,
+                    guardado.getEstado()
+                );
+
+                List<Long> verificadoresIds = usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.VERIFICADOR)
+                    .stream()
+                    .map(Usuario::getId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+
+                notificacionUsuarioService.crearParaUsuarios(
+                    verificadoresIds,
+                    guardado.getId(),
+                    "Nueva solicitud radicada",
+                    "Se radicó la solicitud " + guardado.getNumeroRadicado() + " a nombre de " + guardado.getNombreSolicitante(),
+                    "INFO"
+                );
             
             // Enviar emails
             emailService.enviarConfirmacionRadicacion(
@@ -317,16 +351,20 @@ public class TramiteController {
             }
             
             Tramite tramite = optTramite.get();
+            EstadoTramite estadoAnterior = tramite.getEstado();
             tramite.setEstado(EstadoTramite.EN_VALIDACION);
             tramite.setObservaciones(verificacion.getObservaciones());
 
             String usernameVerificador = (verificacion.getUsername() == null || verificacion.getUsername().isBlank())
                     ? "verificador"
                     : verificacion.getUsername().trim();
+            Long usuarioVerificadorId = null;
             Optional<Usuario> usuarioVerificadorOpt = usuarioRepository
                     .findByUsernameAndRolAndActivoTrue(usernameVerificador, RolUsuario.VERIFICADOR);
             if (usuarioVerificadorOpt.isPresent()) {
-                tramite.setUsuarioVerificador(usuarioVerificadorOpt.get());
+                Usuario usuarioVerificador = usuarioVerificadorOpt.get();
+                tramite.setUsuarioVerificador(usuarioVerificador);
+                usuarioVerificadorId = usuarioVerificador.getId();
             }
 
             int anioConsecutivo = Year.now().getValue();
@@ -372,6 +410,49 @@ public class TramiteController {
             }
             
             Tramite actualizado = tramiteRepository.save(tramite);
+                String accionAuditoria = verificacion.isAprobado() ? "VERIFICACION_APROBADA" : "VERIFICACION_RECHAZADA";
+                auditoriaTramiteService.registrarEvento(
+                    actualizado.getId(),
+                    usuarioVerificadorId,
+                    accionAuditoria,
+                    "Verificación sobre radicado " + actualizado.getNumeroRadicado()
+                        + " con consecutivo " + actualizado.getConsecutivoVerificador(),
+                    estadoAnterior,
+                    actualizado.getEstado()
+                );
+
+            if (verificacion.isAprobado()) {
+                List<Long> alcaldesIds = usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.ALCALDE)
+                        .stream()
+                        .map(Usuario::getId)
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .toList();
+
+                notificacionUsuarioService.crearParaUsuarios(
+                        alcaldesIds,
+                        actualizado.getId(),
+                        "Solicitud lista para firma",
+                        "El trámite " + actualizado.getNumeroRadicado() + " fue aprobado por " + usernameVerificador + " y está en firma.",
+                        "INFO"
+                );
+            } else {
+                List<Long> adminsIds = usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.ADMINISTRADOR)
+                        .stream()
+                        .map(Usuario::getId)
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .toList();
+
+                notificacionUsuarioService.crearParaUsuarios(
+                        adminsIds,
+                        actualizado.getId(),
+                        "Solicitud rechazada por verificador",
+                        "El trámite " + actualizado.getNumeroRadicado() + " fue rechazado por " + usernameVerificador + ".",
+                        "WARNING"
+                );
+            }
+
             var respuesta = new java.util.HashMap<String, Object>();
             respuesta.put("tramiteId", actualizado.getId());
             respuesta.put("numeroRadicado", actualizado.getNumeroRadicado());
@@ -405,6 +486,7 @@ public class TramiteController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body("❌ Usuario administrador no válido o inactivo");
             }
+                Usuario admin = adminOpt.get();
 
             Optional<Tramite> tramiteOpt = tramiteRepository.findById(id);
             if (tramiteOpt.isEmpty()) {
@@ -417,6 +499,7 @@ public class TramiteController {
             List<String> correos = verificadores.stream()
                     .map(Usuario::getEmail)
                     .filter(correo -> correo != null && !correo.isBlank())
+                    .map(correo -> correo.trim().toLowerCase(Locale.ROOT))
                     .distinct()
                     .toList();
 
@@ -437,6 +520,30 @@ public class TramiteController {
                         tramite.getNombreSolicitante() + " | " + detalle
                 );
             }
+
+                List<Long> verificadoresIds = verificadores.stream()
+                    .map(Usuario::getId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+
+                notificacionUsuarioService.crearParaUsuarios(
+                    verificadoresIds,
+                    tramite.getId(),
+                    "Gestión solicitada por administrador",
+                    "El administrador " + admin.getUsername() + " solicitó gestionar el trámite " + tramite.getNumeroRadicado()
+                        + (mensajeAdmin.isBlank() ? "." : ": " + mensajeAdmin),
+                    "INFO"
+                );
+
+                auditoriaTramiteService.registrarEvento(
+                    tramite.getId(),
+                    admin.getId(),
+                    "NOTIFICACION_VERIFICADOR",
+                    "Administrador " + admin.getUsername() + " notificó verificadores para radicado " + tramite.getNumeroRadicado(),
+                    tramite.getEstado(),
+                    tramite.getEstado()
+                );
 
             var respuesta = new java.util.HashMap<String, Object>();
             respuesta.put("ok", true);
@@ -508,6 +615,7 @@ public class TramiteController {
                 }
             
             Tramite tramite = optTramite.get();
+            EstadoTramite estadoAnterior = tramite.getEstado();
 
                 if (tramite.getEstado() != EstadoTramite.EN_FIRMA) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -526,6 +634,31 @@ public class TramiteController {
             subirCertificadoGeneradoADrive(tramite);
             
             Tramite actualizado = tramiteRepository.save(tramite);
+
+                auditoriaTramiteService.registrarEvento(
+                    actualizado.getId(),
+                    usuarioAlcalde.getId(),
+                    "FIRMA_ALCALDE",
+                    "Documento firmado por " + usuarioAlcalde.getUsername() + " para radicado " + actualizado.getNumeroRadicado(),
+                    estadoAnterior,
+                    actualizado.getEstado()
+                );
+
+                Set<Long> destinatariosFirma = java.util.stream.Stream.concat(
+                        usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.ADMINISTRADOR).stream(),
+                        usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.VERIFICADOR).stream()
+                    )
+                    .map(Usuario::getId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+
+                notificacionUsuarioService.crearParaUsuarios(
+                    destinatariosFirma,
+                    actualizado.getId(),
+                    "Certificado firmado por alcalde",
+                    "El trámite " + actualizado.getNumeroRadicado() + " fue firmado por " + usuarioAlcalde.getUsername() + " y quedó FINALIZADO.",
+                    "SUCCESS"
+                );
             
             // Enviar documento final al usuario
             emailService.enviarDocumentoFinal(
@@ -655,7 +788,8 @@ public class TramiteController {
                         item.put("fechaVigencia", t.getFechaVigencia());
                         item.put("tipoCertificado", t.getTipo_certificado());
                         item.put("observaciones", t.getObservaciones());
-                        item.put("certificadoDisponible", t.getContenidoPdfGenerado() != null && t.getContenidoPdfGenerado().length > 0);
+                        item.put("certificadoDisponible", (t.getContenidoPdfGenerado() != null && t.getContenidoPdfGenerado().length > 0)
+                            || extraerDriveFileId(t.getRuta_certificado_final()) != null);
                         return item;
                     })
                     .toList();
@@ -668,7 +802,11 @@ public class TramiteController {
     }
 
     @GetMapping("/{id}/documento-generado")
-    public ResponseEntity<?> descargarDocumentoGenerado(@PathVariable Long id) {
+        public ResponseEntity<?> descargarDocumentoGenerado(
+            @PathVariable Long id,
+            @RequestParam(value = "accion", required = false) String accion,
+            @RequestHeader(value = "X-Username", required = false) String usernameHeader,
+            @RequestHeader(value = "X-Admin-Username", required = false) String adminUsernameHeader) {
         try {
             Optional<Tramite> optTramite = tramiteRepository.findById(id);
             if (optTramite.isEmpty()) {
@@ -676,10 +814,30 @@ public class TramiteController {
             }
 
             Tramite tramite = optTramite.get();
-            if (tramite.getContenidoPdfGenerado() == null || tramite.getContenidoPdfGenerado().length == 0) {
+            byte[] contenido = tramite.getContenidoPdfGenerado();
+            if ((contenido == null || contenido.length == 0) && driveStorageService.isEnabled()) {
+                String driveFileId = extraerDriveFileId(tramite.getRuta_certificado_final());
+                if (driveFileId != null) {
+                    contenido = driveStorageService.downloadFile(driveFileId);
+                }
+            }
+
+            if (contenido == null || contenido.length == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body("No existe documento generado para este trámite");
             }
+
+                Long usuarioId = resolverUsuarioIdPorHeaders(usernameHeader, adminUsernameHeader);
+                String accionAuditoria = resolverAccionDocumentoGenerado(accion);
+                String almacenamiento = extraerDriveFileId(tramite.getRuta_certificado_final()) != null ? "DRIVE" : "BD";
+                auditoriaTramiteService.registrarEvento(
+                    tramite.getId(),
+                    usuarioId,
+                    accionAuditoria,
+                    "Acceso a certificado generado en " + almacenamiento,
+                    tramite.getEstado(),
+                    tramite.getEstado()
+                );
 
             String nombreArchivo = (tramite.getNombrePdfGenerado() != null && !tramite.getNombrePdfGenerado().isBlank())
                     ? tramite.getNombrePdfGenerado()
@@ -688,16 +846,85 @@ public class TramiteController {
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nombreArchivo + "\"")
                     .header(HttpHeaders.CONTENT_TYPE, "application/pdf")
-                    .body(tramite.getContenidoPdfGenerado());
+                    .body(contenido);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Error al descargar documento generado: " + e.getMessage());
         }
     }
 
+    @GetMapping("/{id}/auditoria")
+    public ResponseEntity<?> obtenerAuditoriaTramite(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-Admin-Username", required = false) String adminUsername) {
+        try {
+            if (adminUsername == null || adminUsername.isBlank()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body("❌ Debes autenticarte como administrador");
+            }
+
+            Optional<Usuario> adminOpt = usuarioRepository
+                    .findByUsernameAndRolAndActivoTrue(adminUsername.trim(), RolUsuario.ADMINISTRADOR);
+            if (adminOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body("❌ Usuario administrador no válido o inactivo");
+            }
+
+            Optional<Tramite> tramiteOpt = tramiteRepository.findById(id);
+            if (tramiteOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("❌ Trámite no encontrado");
+            }
+
+            Tramite tramite = tramiteOpt.get();
+            List<AuditoriaTramite> eventos = auditoriaTramiteService.listarPorTramite(id);
+
+            Set<Long> usuarioIds = eventos.stream()
+                    .map(AuditoriaTramite::getUsuarioId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+
+            Map<Long, Usuario> usuariosPorId = usuarioIds.isEmpty()
+                    ? Map.of()
+                    : usuarioRepository.findAllById(usuarioIds).stream()
+                    .collect(Collectors.toMap(Usuario::getId, u -> u));
+
+            List<Map<String, Object>> eventosRespuesta = eventos.stream()
+                    .map(evento -> {
+                        Map<String, Object> item = new HashMap<>();
+                        item.put("id", evento.getId());
+                        item.put("accion", evento.getAccion());
+                        item.put("descripcion", evento.getDescripcion());
+                        item.put("estadoAnterior", evento.getEstadoAnterior());
+                        item.put("estadoNuevo", evento.getEstadoNuevo());
+                        item.put("fechaIntegracion", evento.getFechaIntegracion());
+                        item.put("usuarioId", evento.getUsuarioId());
+
+                        Usuario usuario = evento.getUsuarioId() != null ? usuariosPorId.get(evento.getUsuarioId()) : null;
+                        item.put("username", usuario != null ? usuario.getUsername() : null);
+                        item.put("nombreCompleto", usuario != null ? usuario.getNombreCompleto() : null);
+                        item.put("rol", usuario != null && usuario.getRol() != null ? usuario.getRol().name() : null);
+                        return item;
+                    })
+                    .toList();
+
+            Map<String, Object> respuesta = new HashMap<>();
+            respuesta.put("tramiteId", tramite.getId());
+            respuesta.put("numeroRadicado", tramite.getNumeroRadicado());
+            respuesta.put("totalEventos", eventosRespuesta.size());
+            respuesta.put("eventos", eventosRespuesta);
+            return ResponseEntity.ok(respuesta);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Error consultando auditoría: " + e.getMessage());
+        }
+    }
+
     @GetMapping("/{id}/vista-previa-documento")
     public ResponseEntity<?> vistaPreviaDocumento(@PathVariable Long id,
-                                                  @RequestParam(value = "includePdf", defaultValue = "false") boolean includePdf) {
+                                                  @RequestParam(value = "includePdf", defaultValue = "false") boolean includePdf,
+                                                  @RequestHeader(value = "X-Username", required = false) String usernameHeader,
+                                                  @RequestHeader(value = "X-Admin-Username", required = false) String adminUsernameHeader) {
         try {
             Optional<Tramite> optTramite = tramiteRepository.findById(id);
             if (optTramite.isEmpty()) {
@@ -754,6 +981,16 @@ public class TramiteController {
             if (errorPdf != null && !errorPdf.isBlank()) {
                 respuesta.put("pdfError", errorPdf);
             }
+
+            Long usuarioId = resolverUsuarioIdPorHeaders(usernameHeader, adminUsernameHeader);
+            auditoriaTramiteService.registrarEvento(
+                    tramite.getId(),
+                    usuarioId,
+                    includePdf ? "VISTA_PREVIA_DOCUMENTO_CON_PDF" : "VISTA_PREVIA_DOCUMENTO",
+                    "Consulta de vista previa del documento generado",
+                    tramite.getEstado(),
+                    tramite.getEstado()
+            );
 
             return ResponseEntity.ok(respuesta);
         } catch (Exception e) {
@@ -972,6 +1209,34 @@ public class TramiteController {
             return valor.substring(DRIVE_PREFIX.length());
         }
         return null;
+    }
+
+    private Long resolverUsuarioIdPorHeaders(String usernameHeader, String adminUsernameHeader) {
+        String username = null;
+        if (usernameHeader != null && !usernameHeader.isBlank()) {
+            username = usernameHeader.trim();
+        } else if (adminUsernameHeader != null && !adminUsernameHeader.isBlank()) {
+            username = adminUsernameHeader.trim();
+        }
+
+        if (username == null || username.isBlank()) {
+            return null;
+        }
+
+        return usuarioRepository.findByUsername(username)
+                .map(Usuario::getId)
+                .orElse(null);
+    }
+
+    private String resolverAccionDocumentoGenerado(String accion) {
+        String accionNormalizada = accion == null ? "" : accion.trim().toLowerCase(Locale.ROOT);
+        if ("ver".equals(accionNormalizada) || "visualizar".equals(accionNormalizada) || "open".equals(accionNormalizada)) {
+            return "CERTIFICADO_GENERADO_VISUALIZADO";
+        }
+        if ("descargar".equals(accionNormalizada) || "download".equals(accionNormalizada)) {
+            return "CERTIFICADO_GENERADO_DESCARGADO";
+        }
+        return "CERTIFICADO_GENERADO_ACCESO";
     }
 
     private void subirCertificadoGeneradoADrive(Tramite tramite) throws IOException {
