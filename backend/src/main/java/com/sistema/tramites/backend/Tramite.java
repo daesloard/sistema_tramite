@@ -77,6 +77,9 @@ public class Tramite {
     private String ruta_certificado;
 
     @Column
+    private String ruta_certificado_final;
+
+    @Column
     private String driveFolderId;
 
     @Column
@@ -318,6 +321,14 @@ public class Tramite {
 
     public void setRuta_certificado(String ruta_certificado) {
         this.ruta_certificado = ruta_certificado;
+    }
+
+    public String getRuta_certificado_final() {
+        return ruta_certificado_final;
+    }
+
+    public void setRuta_certificado_final(String ruta_certificado_final) {
+        this.ruta_certificado_final = ruta_certificado_final;
     }
 
     public String getDriveFolderId() {

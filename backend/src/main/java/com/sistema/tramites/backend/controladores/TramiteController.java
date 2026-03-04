@@ -289,6 +289,14 @@ public class TramiteController {
             respuesta.put("fechaSolicitud", guardado.getFechaRadicacion());
             respuesta.put("fechaVencimiento", fechaVencimiento);
             respuesta.put("estado", "RADICADO");
+                respuesta.put("driveHabilitado", driveStorageService.isEnabled());
+                respuesta.put("driveFolderId", guardado.getDriveFolderId());
+                respuesta.put("almacenamientoIdentidad", extraerDriveFileId(guardado.getRuta_documento_identidad()) != null ? "DRIVE" : "BD");
+                respuesta.put("almacenamientoSolicitud", extraerDriveFileId(guardado.getRuta_documento_solicitud()) != null ? "DRIVE" : "BD");
+                respuesta.put("almacenamientoCertificado", extraerDriveFileId(guardado.getRuta_certificado()) != null
+                    || extraerDriveFileId(guardado.getRuta_certificado_sisben()) != null
+                    || extraerDriveFileId(guardado.getRuta_certificado_electoral()) != null
+                    ? "DRIVE" : "BD");
             respuesta.put("mensaje", "Solicitud radicada exitosamente");
 
             return ResponseEntity.status(HttpStatus.CREATED).body(respuesta);
@@ -351,6 +359,7 @@ public class TramiteController {
                 }
                 documentoGeneradoService.generarYAdjuntarPdf(tramite, false, verificacion.getObservaciones());
                 tramite.setHashDocumentoGenerado(calcularHashSha256(tramite.getContenidoPdfGenerado()));
+                subirCertificadoGeneradoADrive(tramite);
                 emailService.enviarDocumentoFinal(
                         tramite.getCorreoElectronico(),
                         tramite.getNombreSolicitante(),
@@ -514,6 +523,7 @@ public class TramiteController {
             }
             documentoGeneradoService.generarYAdjuntarPdf(tramite, true, "");
             tramite.setHashDocumentoGenerado(calcularHashSha256(tramite.getContenidoPdfGenerado()));
+            subirCertificadoGeneradoADrive(tramite);
             
             Tramite actualizado = tramiteRepository.save(tramite);
             
@@ -951,6 +961,54 @@ public class TramiteController {
         String sufijo = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyMMddHHmmss"));
         String prefijo = base.length() <= 8 ? base : base.substring(base.length() - 8);
         return prefijo + "-" + sufijo;
+    }
+
+    private String extraerDriveFileId(String ruta) {
+        if (ruta == null) {
+            return null;
+        }
+        String valor = ruta.trim();
+        if (valor.startsWith(DRIVE_PREFIX) && valor.length() > DRIVE_PREFIX.length()) {
+            return valor.substring(DRIVE_PREFIX.length());
+        }
+        return null;
+    }
+
+    private void subirCertificadoGeneradoADrive(Tramite tramite) throws IOException {
+        if (!driveStorageService.isEnabled()) {
+            return;
+        }
+        byte[] contenido = tramite.getContenidoPdfGenerado();
+        if (contenido == null || contenido.length == 0) {
+            throw new IllegalStateException("No hay PDF generado para almacenar en Google Drive");
+        }
+
+        String nombreArchivo = construirNombreArchivoCertificadoFinal(tramite);
+        String driveFileId = driveStorageService.uploadSignedCertificate(nombreArchivo, "application/pdf", contenido);
+        tramite.setRuta_certificado_final(DRIVE_PREFIX + driveFileId);
+    }
+
+    private String construirNombreArchivoCertificadoFinal(Tramite tramite) {
+        String nombre = normalizarSegmentoNombreArchivo(tramite.getNombreSolicitante(), "SOLICITANTE");
+        String documento = normalizarSegmentoNombreArchivo(tramite.getNumeroDocumento(), "SIN_DOCUMENTO");
+        return nombre + "_" + documento + ".pdf";
+    }
+
+    private String normalizarSegmentoNombreArchivo(String valor, String porDefecto) {
+        if (valor == null || valor.isBlank()) {
+            return porDefecto;
+        }
+        String base = Normalizer.normalize(valor, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replaceAll("[^A-Za-z0-9 _-]", "")
+                .trim()
+                .replaceAll("\\s+", "_")
+                .replaceAll("_+", "_");
+
+        if (base.isBlank()) {
+            return porDefecto;
+        }
+        return base.toUpperCase(Locale.ROOT);
     }
 
     private String calcularHashSha256(byte[] contenido) {

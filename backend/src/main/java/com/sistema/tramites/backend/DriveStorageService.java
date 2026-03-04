@@ -14,9 +14,12 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,6 +27,7 @@ import java.util.regex.Pattern;
 public class DriveStorageService {
 
     private static final String APP_NAME = "sistema-tramites";
+    private static final String CERTIFICADOS_FIRMADOS_FOLDER_NAME = "CERTIFICADOS FIRMADOS";
 
     @Value("${app.storage.drive.enabled:false}")
     private boolean driveEnabled;
@@ -35,9 +39,57 @@ public class DriveStorageService {
     private String folderId;
 
     private volatile Drive driveClient;
+    private volatile String certificadosFirmadosFolderId;
 
     public boolean isEnabled() {
         return driveEnabled && credentialsJsonBase64 != null && !credentialsJsonBase64.isBlank();
+    }
+
+    public Map<String, Object> getDiagnostics() {
+        Map<String, Object> diagnostics = new HashMap<>();
+        diagnostics.put("driveEnabledFlag", driveEnabled);
+        diagnostics.put("hasCredentials", credentialsJsonBase64 != null && !credentialsJsonBase64.isBlank());
+        diagnostics.put("hasFolderId", folderId != null && !folderId.isBlank());
+        diagnostics.put("isEnabled", isEnabled());
+        diagnostics.put("folderId", folderId == null ? "" : folderId.trim());
+
+        if (!isEnabled()) {
+            diagnostics.put("ok", false);
+            diagnostics.put("reason", "Drive no habilitado por configuración");
+            return diagnostics;
+        }
+
+        try {
+            byte[] credentialBytes = decodeCredentialsBytes();
+            String credentialsText = new String(credentialBytes, StandardCharsets.UTF_8);
+            diagnostics.put("credentialsMode", credentialsText.trim().startsWith("{") ? "json-raw|base64-decodificado" : "desconocido");
+            diagnostics.put("credentialsPreview", extraerClientEmail(credentialsText));
+
+            Drive drive = getDriveClient();
+            if (folderId != null && !folderId.isBlank()) {
+                com.google.api.services.drive.model.File folder = drive.files()
+                        .get(folderId.trim())
+                        .setSupportsAllDrives(true)
+                        .setFields("id,name,mimeType")
+                        .execute();
+                diagnostics.put("folderAccessible", true);
+                diagnostics.put("folderName", folder.getName());
+                diagnostics.put("folderMimeType", folder.getMimeType());
+            } else {
+                diagnostics.put("folderAccessible", false);
+                diagnostics.put("folderName", "N/A");
+                diagnostics.put("folderMimeType", "N/A");
+            }
+
+            diagnostics.put("ok", true);
+            diagnostics.put("reason", "Configuración Drive válida");
+            return diagnostics;
+        } catch (Exception ex) {
+            diagnostics.put("ok", false);
+            diagnostics.put("reason", ex.getMessage());
+            diagnostics.put("errorType", ex.getClass().getSimpleName());
+            return diagnostics;
+        }
     }
 
     public String uploadFile(String fileName, String contentType, byte[] bytes) throws IOException {
@@ -72,6 +124,11 @@ public class DriveStorageService {
         } catch (GeneralSecurityException e) {
             throw new IOException("No fue posible inicializar cliente de Google Drive", e);
         }
+    }
+
+    public String uploadSignedCertificate(String fileName, String contentType, byte[] bytes) throws IOException {
+        String targetFolderId = getOrCreateSignedCertificatesFolder();
+        return uploadFileToFolder(fileName, contentType, bytes, targetFolderId);
     }
 
     public String createSolicitudFolderByDocumento(String numeroDocumento, int year) throws IOException {
@@ -113,6 +170,57 @@ public class DriveStorageService {
                 .setFields("id")
                 .execute();
         return createdFolder.getId();
+    }
+
+    private String getOrCreateSignedCertificatesFolder() throws IOException {
+        if (!isEnabled()) {
+            throw new IllegalStateException("Google Drive storage no está habilitado");
+        }
+
+        String folderCache = certificadosFirmadosFolderId;
+        if (folderCache != null && !folderCache.isBlank()) {
+            return folderCache;
+        }
+
+        try {
+            Drive drive = getDriveClient();
+            synchronized (this) {
+                if (certificadosFirmadosFolderId != null && !certificadosFirmadosFolderId.isBlank()) {
+                    return certificadosFirmadosFolderId;
+                }
+
+                String existente = findFolderIdByExactName(drive, CERTIFICADOS_FIRMADOS_FOLDER_NAME);
+                if (existente != null && !existente.isBlank()) {
+                    certificadosFirmadosFolderId = existente;
+                    return certificadosFirmadosFolderId;
+                }
+
+                certificadosFirmadosFolderId = createFolder(drive, CERTIFICADOS_FIRMADOS_FOLDER_NAME);
+                return certificadosFirmadosFolderId;
+            }
+        } catch (GeneralSecurityException e) {
+            throw new IOException("No fue posible inicializar cliente de Google Drive", e);
+        }
+    }
+
+    private String findFolderIdByExactName(Drive drive, String folderName) throws IOException {
+        String query = baseFolderQuery()
+                + " and mimeType = 'application/vnd.google-apps.folder'"
+                + " and name = '" + escapeQueryValue(folderName) + "'";
+
+        com.google.api.services.drive.model.FileList files = drive.files()
+                .list()
+                .setQ(query)
+                .setPageSize(1)
+                .setIncludeItemsFromAllDrives(true)
+                .setSupportsAllDrives(true)
+                .setFields("files(id)")
+                .execute();
+
+        if (files.getFiles() == null || files.getFiles().isEmpty()) {
+            return null;
+        }
+        return files.getFiles().get(0).getId();
     }
 
     private boolean folderExistsByName(Drive drive, String folderName) throws IOException {
@@ -217,7 +325,7 @@ public class DriveStorageService {
                 return driveClient;
             }
 
-            byte[] credentialsBytes = Base64.getDecoder().decode(credentialsJsonBase64.trim());
+            byte[] credentialsBytes = decodeCredentialsBytes();
             try (InputStream credentialsStream = new ByteArrayInputStream(credentialsBytes)) {
                 GoogleCredentials credentials = GoogleCredentials.fromStream(credentialsStream)
                     .createScoped(Collections.singleton(DriveScopes.DRIVE));
@@ -232,5 +340,39 @@ public class DriveStorageService {
 
             return driveClient;
         }
+    }
+
+    private byte[] decodeCredentialsBytes() {
+        if (credentialsJsonBase64 == null || credentialsJsonBase64.isBlank()) {
+            throw new IllegalStateException("Credenciales de Drive vacías");
+        }
+
+        String raw = credentialsJsonBase64.trim();
+        if (raw.startsWith("{") && raw.endsWith("}")) {
+            return raw.getBytes(StandardCharsets.UTF_8);
+        }
+
+        String normalizado = raw.replaceAll("\\s+", "");
+        try {
+            return Base64.getDecoder().decode(normalizado);
+        } catch (IllegalArgumentException ex) {
+            try {
+                return Base64.getUrlDecoder().decode(normalizado);
+            } catch (IllegalArgumentException ex2) {
+                throw new IllegalStateException("Formato inválido en credenciales de Drive (se espera base64 o JSON crudo)");
+            }
+        }
+    }
+
+    private String extraerClientEmail(String jsonText) {
+        if (jsonText == null || jsonText.isBlank()) {
+            return "N/A";
+        }
+        Pattern pattern = Pattern.compile("\\\"client_email\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
+        Matcher matcher = pattern.matcher(jsonText);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return "N/A";
     }
 }

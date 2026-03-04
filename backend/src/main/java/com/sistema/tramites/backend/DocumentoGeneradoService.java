@@ -91,6 +91,7 @@ public class DocumentoGeneradoService {
     private final String certificadoP12Path;
     private final String certificadoP12Password;
     private final String certificadoP12Alias;
+    private volatile CertBundle certBundleCache;
 
     static {
         if (Security.getProvider("BC") == null) {
@@ -479,15 +480,28 @@ public class DocumentoGeneradoService {
     }
 
     private CertBundle cargarCertificadoFirmante() throws Exception {
+        CertBundle cache = certBundleCache;
+        if (cache != null) {
+            return cache;
+        }
+
+        synchronized (this) {
+            if (certBundleCache != null) {
+                return certBundleCache;
+            }
+
         if (certificadoP12Path != null && !certificadoP12Path.isBlank()) {
             Path path = Paths.get(certificadoP12Path.trim());
             if (Files.exists(path)) {
-                return cargarDesdePkcs12(path);
+                certBundleCache = cargarDesdePkcs12(path);
+                return certBundleCache;
             }
             logger.warn("Ruta de certificado .p12 no encontrada: {}. Se usará certificado autofirmado temporal.", path);
         }
 
-        return generarCertificadoAutofirmadoTemporal();
+            certBundleCache = generarCertificadoAutofirmadoTemporal();
+            return certBundleCache;
+        }
     }
 
     private CertBundle cargarDesdePkcs12(Path path) throws Exception {

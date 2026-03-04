@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -165,7 +166,10 @@ public class FileUploadController {
             return ResponseEntity.ok(new UploadResponseDTO(
                     true,
                     "✅ Archivo " + tipo + " cargado exitosamente",
-                    tramite.getId()
+                    tramite.getId(),
+                    driveId != null ? "DRIVE" : "BD",
+                    tramite.getDriveFolderId(),
+                    driveId
             ));
 
         } catch (IOException e) {
@@ -425,6 +429,18 @@ public class FileUploadController {
         }
     }
 
+    @GetMapping("/drive-diagnostico")
+    public ResponseEntity<?> diagnosticarDrive() {
+        try {
+            Map<String, Object> diagnostics = driveStorageService.getDiagnostics();
+            boolean ok = Boolean.TRUE.equals(diagnostics.get("ok"));
+            return ResponseEntity.status(ok ? HttpStatus.OK : HttpStatus.BAD_REQUEST).body(diagnostics);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Error al diagnosticar Drive: " + e.getMessage());
+        }
+    }
+
     private String resolverClaveCertificado(String tipoCertificado) {
         String tipo = tipoCertificado == null ? "" : tipoCertificado.trim().toLowerCase();
         if ("electoral".equals(tipo)) {
@@ -523,11 +539,18 @@ public class FileUploadController {
         public boolean success;
         public String message;
         public Long tramiteId;
+        public String almacenamiento;
+        public String driveFolderId;
+        public String driveFileId;
 
-        public UploadResponseDTO(boolean success, String message, Long tramiteId) {
+        public UploadResponseDTO(boolean success, String message, Long tramiteId,
+                                 String almacenamiento, String driveFolderId, String driveFileId) {
             this.success = success;
             this.message = message;
             this.tramiteId = tramiteId;
+            this.almacenamiento = almacenamiento;
+            this.driveFolderId = driveFolderId;
+            this.driveFileId = driveFileId;
         }
     }
 

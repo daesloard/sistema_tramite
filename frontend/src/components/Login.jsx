@@ -97,20 +97,6 @@ const styles = {
     fontSize: '12px',
     color: '#7f8c8d',
   },
-  credentialsHint: {
-    background: '#e3f2fd',
-    padding: '10px',
-    borderRadius: '6px',
-    borderLeft: '3px solid #2196F3',
-    marginTop: '15px',
-    fontFamily: 'monospace',
-    color: '#1565c0',
-  },
-  credentialsStrong: {
-    display: 'block',
-    marginBottom: '5px',
-    fontFamily: 'Segoe UI, sans-serif',
-  },
 };
 
 export default function Login({ onLoginSuccess, rol }) {
@@ -188,8 +174,6 @@ export default function Login({ onLoginSuccess, rol }) {
     ? '⚙️ Acceso Administrador'
     : '🔐 Inicio de Sesión';
 
-  const demoUsuario = rol ? rol.toLowerCase() : 'verificador | alcalde | admin';
-
   return (
     <div style={styles.loginContainer}>
       <div style={styles.loginCard}>
@@ -246,9 +230,6 @@ export default function Login({ onLoginSuccess, rol }) {
 
         <div style={styles.loginFooter}>
           <p style={styles.footerText}>🔒 Acceso seguro con autenticación JWT</p>
-          <p style={{ ...styles.footerText, ...styles.credentialsHint }}>
-            <strong style={styles.credentialsStrong}>Demo:</strong> usuario: {demoUsuario} | contraseña: password123
-          </p>
         </div>
       </div>
     </div>
