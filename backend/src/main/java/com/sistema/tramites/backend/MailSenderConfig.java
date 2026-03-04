@@ -35,6 +35,9 @@ public class MailSenderConfig {
     @Value("${spring.mail.properties.mail.smtp.writetimeout:10000}")
     private String writeTimeout;
 
+    @Value("${app.mail.smtp.ssl.trust:smtp.gmail.com}")
+    private String smtpSslTrust;
+
     @Bean
     public JavaMailSender javaMailSender() {
         JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
@@ -52,6 +55,10 @@ public class MailSenderConfig {
         props.put("mail.smtp.connectiontimeout", connectionTimeout);
         props.put("mail.smtp.timeout", timeout);
         props.put("mail.smtp.writetimeout", writeTimeout);
+        if (smtpSslTrust != null && !smtpSslTrust.isBlank()) {
+            props.put("mail.smtp.ssl.trust", smtpSslTrust.trim());
+        }
+        props.put("mail.smtp.ssl.checkserveridentity", "false");
         
         return mailSender;
     }

@@ -24,6 +24,10 @@ const styles = {
   lista: { background: '#fff', padding: '14px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,.08)', height: 'fit-content' },
   listaDesktop: { position: 'sticky', top: '20px' },
   listaTitulo: { margin: '0 0 12px 0', fontSize: '16px', color: '#2c3e50' },
+  busquedaWrap: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' },
+  busquedaInput: { width: 'min(380px, 100%)', border: '1px solid #cfd8dc', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', boxSizing: 'border-box' },
+  busquedaMeta: { margin: 0, fontSize: '12px', color: '#6b7280' },
+  busquedaBtn: { padding: '0.35rem 0.75rem', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', width: 'auto', whiteSpace: 'nowrap' },
   listaVacia: { textAlign: 'center', padding: '24px 10px', color: '#95a5a6' },
   listaScroll: { display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' },
   listaScrollDesktop: { maxHeight: 'calc(100vh - 260px)' },
@@ -67,6 +71,24 @@ const styles = {
   certMeta: { margin: '2px 0', fontSize: '12px', color: '#4b5563' },
   seccionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.8rem', marginBottom: '10px', flexWrap: 'wrap' },
   btnToggleSeccion: { padding: '0.35rem 0.75rem', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', width: 'auto', whiteSpace: 'nowrap' },
+  avisoOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(17, 24, 39, 0.35)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '16px',
+    zIndex: 120,
+  },
+  panelAviso: { width: 'min(92vw, 520px)', padding: '14px 16px', borderRadius: '10px', border: '1px solid transparent', boxShadow: '0 10px 30px rgba(0,0,0,0.22)' },
+  panelAvisoTexto: { margin: 0, fontSize: '14px', fontWeight: 600, lineHeight: 1.45 },
+  panelAvisoAcciones: { marginTop: '12px', display: 'flex', justifyContent: 'flex-end' },
+  panelAvisoCerrar: { border: 'none', background: '#1f2937', color: '#fff', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, lineHeight: 1, padding: '8px 10px' },
+  panelAvisoError: { background: '#ffebee', borderColor: '#ef5350', color: '#b71c1c' },
+  panelAvisoExito: { background: '#e8f5e9', borderColor: '#81c784', color: '#1b5e20' },
+  panelAvisoInfo: { background: '#e3f2fd', borderColor: '#64b5f6', color: '#0d47a1' },
+  panelAvisoWarning: { background: '#fff4e5', borderColor: '#f59e0b', color: '#92400e' },
 };
 
 const estadoBadge = (estado) => {
@@ -100,6 +122,52 @@ const formatearFechaHora = (valor) => {
       });
 };
 
+const normalizarFecha = (valor) => {
+  if (!valor) return null;
+  const fecha = new Date(valor);
+  if (Number.isNaN(fecha.getTime())) return null;
+  return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+};
+
+const esDiaHabil = (fecha) => {
+  const dia = fecha.getDay();
+  return dia !== 0 && dia !== 6;
+};
+
+const calcularDiasHabilesEntre = (inicio, fin) => {
+  if (!inicio || !fin) return 0;
+  if (inicio.getTime() === fin.getTime()) return 0;
+
+  const avanzar = inicio < fin;
+  let cursor = new Date(inicio);
+  let total = 0;
+
+  while ((avanzar && cursor < fin) || (!avanzar && cursor > fin)) {
+    cursor.setDate(cursor.getDate() + (avanzar ? 1 : -1));
+    if (esDiaHabil(cursor)) {
+      total += avanzar ? 1 : -1;
+    }
+  }
+
+  return total;
+};
+
+const obtenerTextoDiasHabilesRestantes = (fechaVencimiento) => {
+  const vencimiento = normalizarFecha(fechaVencimiento);
+  if (!vencimiento) return null;
+
+  const hoy = normalizarFecha(new Date());
+  const dias = calcularDiasHabilesEntre(hoy, vencimiento);
+
+  if (dias > 0) {
+    return `⏳ Faltan ${dias} día(s) hábil(es)`;
+  }
+  if (dias === 0) {
+    return '⏳ Vence hoy';
+  }
+  return `⚠️ Vencido hace ${Math.abs(dias)} día(s) hábil(es)`;
+};
+
 export default function PanelVerificador() {
   const [solicitudes, setSolicitudes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -108,6 +176,7 @@ export default function PanelVerificador() {
   const [observaciones, setObservaciones] = useState('');
   const [consecutivo, setConsecutivo] = useState('');
   const [filtroVista, setFiltroVista] = useState('pendientes');
+  const [busquedaSolicitudes, setBusquedaSolicitudes] = useState('');
   const [procesando, setProcesando] = useState(false);
   const [documentStatus, setDocumentStatus] = useState(null);
   const [loadingDocumentos, setLoadingDocumentos] = useState(false);
@@ -117,6 +186,18 @@ export default function PanelVerificador() {
   const [filtroCertTipo, setFiltroCertTipo] = useState('todos');
   const [certificadosExpandido, setCertificadosExpandido] = useState(false);
   const [enviandoNotificacionAdmin, setEnviandoNotificacionAdmin] = useState(false);
+  const [avisoPanel, setAvisoPanel] = useState(null);
+
+  const mostrarAvisoPanel = (tipo, mensaje) => {
+    setAvisoPanel({ tipo, mensaje });
+  };
+
+  const obtenerEstiloAvisoPanel = (tipo) => {
+    if (tipo === 'success') return styles.panelAvisoExito;
+    if (tipo === 'warning') return styles.panelAvisoWarning;
+    if (tipo === 'info') return styles.panelAvisoInfo;
+    return styles.panelAvisoError;
+  };
 
   useEffect(() => {
     cargarSolicitudes();
@@ -138,6 +219,21 @@ export default function PanelVerificador() {
 
   const filtroActual = useMemo(() => FILTROS.find((f) => f.key === filtroVista) || FILTROS[0], [filtroVista]);
   const solicitudesFiltradas = useMemo(() => solicitudes.filter((s) => cumpleFiltro(s, filtroVista)), [solicitudes, filtroVista]);
+  const textoBusquedaSolicitudes = busquedaSolicitudes.trim().toLowerCase();
+  const solicitudesFiltradasBusqueda = useMemo(() => {
+    if (!textoBusquedaSolicitudes) return solicitudesFiltradas;
+    return solicitudesFiltradas.filter((solicitud) => {
+      const campos = [
+        solicitud?.numeroRadicado,
+        solicitud?.nombreSolicitante,
+        solicitud?.numeroDocumento,
+        solicitud?.estado,
+        solicitud?.tipoTramite,
+        solicitud?.tipo_certificado,
+      ];
+      return campos.some((valor) => (valor || '').toString().toLowerCase().includes(textoBusquedaSolicitudes));
+    });
+  }, [solicitudesFiltradas, textoBusquedaSolicitudes]);
   const certificadosGeneradosFiltrados = useMemo(() => {
     const base = solicitudes.filter((s) => s.estado === 'FINALIZADO' || s.estado === 'RECHAZADO');
     return base.filter((s) => {
@@ -150,6 +246,10 @@ export default function PanelVerificador() {
     });
   }, [solicitudes, filtroCertRadicado, filtroCertNombre, filtroCertTipo]);
   const esPendienteSeleccionada = selectedSolicitud ? (selectedSolicitud.estado === 'EN_VALIDACION' || selectedSolicitud.estado === 'RADICADO') : false;
+  const textoDiasHabilesSeleccionada = useMemo(() => {
+    if (!selectedSolicitud || !esPendienteSeleccionada) return null;
+    return obtenerTextoDiasHabilesRestantes(selectedSolicitud.fechaVencimiento);
+  }, [selectedSolicitud, esPendienteSeleccionada]);
   const documentosAdjuntos = useMemo(() => {
     if (!selectedSolicitud) return [];
 
@@ -214,7 +314,9 @@ export default function PanelVerificador() {
   const cargarEstadoDocumentos = async (tramiteId) => {
     setLoadingDocumentos(true);
     try {
-      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/verificar-documentos`);
+      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/verificar-documentos`, {
+        headers: obtenerHeadersAuditoriaUsuario(),
+      });
       if (!response.ok) throw new Error('No se pudo cargar el estado de documentos');
       const data = await response.json();
       setDocumentStatus(data);
@@ -225,21 +327,54 @@ export default function PanelVerificador() {
     }
   };
 
+  const obtenerMensajeErrorRespuesta = async (response, mensajePorDefecto) => {
+    try {
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await response.json();
+        const mensaje = data?.message || data?.error;
+        if (mensaje) return mensaje;
+      }
+
+      const texto = (await response.text()).trim();
+      if (texto) return texto;
+    } catch {
+      // no-op
+    }
+    return mensajePorDefecto;
+  };
+
+  const obtenerHeadersAuditoriaUsuario = () => {
+    try {
+      const userGuardado = localStorage.getItem('user');
+      if (!userGuardado) return {};
+      const user = JSON.parse(userGuardado);
+      if (!user?.username) return {};
+      return { 'X-Username': user.username };
+    } catch {
+      return {};
+    }
+  };
+
   const abrirDocumento = async (tramiteId, tipo) => {
     try {
-      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/descargar/${tipo}`);
+      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/descargar/${tipo}?accion=ver`, {
+        headers: obtenerHeadersAuditoriaUsuario(),
+      });
       if (!response.ok) throw new Error('Documento no disponible para abrir');
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {
-      alert(`❌ Error al abrir: ${err.message}`);
+      mostrarAvisoPanel('error', `Error al abrir: ${err.message}`);
     }
   };
 
   const descargarDocumento = async (tramiteId, tipo) => {
     try {
-      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/descargar/${tipo}`);
+      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/descargar/${tipo}?accion=descargar`, {
+        headers: obtenerHeadersAuditoriaUsuario(),
+      });
       if (!response.ok) throw new Error('Documento no disponible para descargar');
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -251,7 +386,7 @@ export default function PanelVerificador() {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert(`❌ Error al descargar: ${err.message}`);
+      mostrarAvisoPanel('error', `Error al descargar: ${err.message}`);
     }
   };
 
@@ -269,16 +404,20 @@ export default function PanelVerificador() {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert(`❌ Error al descargar consolidado: ${err.message}`);
+      mostrarAvisoPanel('error', `Error al descargar consolidado: ${err.message}`);
     }
   };
 
   const handleAprobar = async () => {
     if (!selectedSolicitud) return;
     if (!documentosObligatoriosCompletos) {
-      return alert('❌ No se puede aprobar: faltan documentos obligatorios por cargar.');
+      mostrarAvisoPanel('warning', 'No se puede aprobar: faltan documentos obligatorios por cargar.');
+      return;
     }
-    if (!consecutivo.trim()) return alert('Por favor, registra el consecutivo del verificador');
+    if (!consecutivo.trim()) {
+      mostrarAvisoPanel('warning', 'Por favor, registra el consecutivo del verificador');
+      return;
+    }
 
     setProcesando(true);
     try {
@@ -295,15 +434,18 @@ export default function PanelVerificador() {
           username: user?.username || 'verificador',
         }),
       });
-      if (!response.ok) throw new Error('Error al aprobar');
+      if (!response.ok) {
+        const mensajeError = await obtenerMensajeErrorRespuesta(response, 'Error al aprobar');
+        throw new Error(mensajeError);
+      }
 
-      alert('✅ Solicitud aprobada y enviada al alcalde para firma');
+      mostrarAvisoPanel('success', 'Solicitud aprobada y enviada al alcalde para firma');
       setSelectedSolicitud(null);
       setObservaciones('');
       setConsecutivo('');
       await cargarSolicitudes();
     } catch (err) {
-      alert(`❌ Error: ${err.message}`);
+      mostrarAvisoPanel('error', `Error: ${err.message}`);
     } finally {
       setProcesando(false);
     }
@@ -312,10 +454,17 @@ export default function PanelVerificador() {
   const handleRechazar = async () => {
     if (!selectedSolicitud) return;
     if (!documentosObligatoriosCompletos) {
-      return alert('❌ No se puede rechazar: faltan documentos obligatorios por cargar.');
+      mostrarAvisoPanel('warning', 'No se puede rechazar: faltan documentos obligatorios por cargar.');
+      return;
     }
-    if (!observaciones.trim()) return alert('Por favor, proporciona una razón para el rechazo');
-    if (!consecutivo.trim()) return alert('Por favor, registra el consecutivo del verificador');
+    if (!observaciones.trim()) {
+      mostrarAvisoPanel('warning', 'Por favor, proporciona una razón para el rechazo');
+      return;
+    }
+    if (!consecutivo.trim()) {
+      mostrarAvisoPanel('warning', 'Por favor, registra el consecutivo del verificador');
+      return;
+    }
 
     setProcesando(true);
     try {
@@ -332,15 +481,18 @@ export default function PanelVerificador() {
           username: user?.username || 'verificador',
         }),
       });
-      if (!response.ok) throw new Error('Error al rechazar');
+      if (!response.ok) {
+        const mensajeError = await obtenerMensajeErrorRespuesta(response, 'Error al rechazar');
+        throw new Error(mensajeError);
+      }
 
-      alert('⛔ Solicitud rechazada. Se ha notificado al solicitante.');
+      mostrarAvisoPanel('success', 'Solicitud rechazada. Se ha notificado al solicitante.');
       setSelectedSolicitud(null);
       setObservaciones('');
       setConsecutivo('');
       await cargarSolicitudes();
     } catch (err) {
-      alert(`❌ Error: ${err.message}`);
+      mostrarAvisoPanel('error', `Error: ${err.message}`);
     } finally {
       setProcesando(false);
     }
@@ -349,7 +501,8 @@ export default function PanelVerificador() {
   const handleNotificarAdmin = async () => {
     if (!selectedSolicitud) return;
     if (loadingDocumentos) {
-      return alert('⏳ Espera a que cargue el estado documental para notificar al administrador.');
+      mostrarAvisoPanel('info', 'Espera a que cargue el estado documental para notificar al administrador.');
+      return;
     }
 
     setEnviandoNotificacionAdmin(true);
@@ -376,9 +529,9 @@ export default function PanelVerificador() {
       }
 
       const data = await response.json();
-      alert(`✅ Notificación enviada al administrador (destinatarios: ${data?.enviadoA || 0}).`);
+      mostrarAvisoPanel('success', `Notificación enviada al administrador (destinatarios: ${data?.enviadoA || 0}).`);
     } catch (err) {
-      alert(`❌ Error al notificar al administrador: ${err.message}`);
+      mostrarAvisoPanel('error', `Error al notificar al administrador: ${err.message}`);
     } finally {
       setEnviandoNotificacionAdmin(false);
     }
@@ -411,6 +564,16 @@ export default function PanelVerificador() {
       </div>
 
       {error ? <div style={styles.error}>⚠️ {error}</div> : null}
+      {avisoPanel ? (
+        <div style={styles.avisoOverlay} onClick={() => setAvisoPanel(null)}>
+          <div style={{ ...styles.panelAviso, ...obtenerEstiloAvisoPanel(avisoPanel.tipo) }} onClick={(e) => e.stopPropagation()}>
+            <p style={styles.panelAvisoTexto}>{avisoPanel.mensaje}</p>
+            <div style={styles.panelAvisoAcciones}>
+              <button style={styles.panelAvisoCerrar} onClick={() => setAvisoPanel(null)} aria-label="Cerrar aviso">Entendido</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div style={styles.certificadosSeccion}>
         <div style={styles.seccionHeader}>
@@ -461,14 +624,35 @@ export default function PanelVerificador() {
 
       <div style={{ ...styles.layout, ...(isMobile ? styles.layoutMobile : styles.layoutDesktop) }}>
         <div style={{ ...styles.lista, ...(isMobile ? {} : styles.listaDesktop) }}>
-          <h3 style={styles.listaTitulo}>{filtroActual.titulo} ({solicitudesFiltradas.length})</h3>
+          <h3 style={styles.listaTitulo}>{filtroActual.titulo} ({solicitudesFiltradasBusqueda.length})</h3>
+
+          <div style={styles.busquedaWrap}>
+            <input
+              style={styles.busquedaInput}
+              placeholder="Buscar por radicado, solicitante, documento, estado o tipo..."
+              value={busquedaSolicitudes}
+              onChange={(e) => setBusquedaSolicitudes(e.target.value)}
+            />
+            {busquedaSolicitudes.trim() ? (
+              <button style={styles.busquedaBtn} onClick={() => setBusquedaSolicitudes('')}>
+                Limpiar
+              </button>
+            ) : null}
+            <p style={styles.busquedaMeta}>Mostrando {solicitudesFiltradasBusqueda.length} de {solicitudesFiltradas.length}</p>
+          </div>
 
           {solicitudesFiltradas.length === 0 ? (
             <div style={styles.listaVacia}>No hay solicitudes para esta vista</div>
+          ) : solicitudesFiltradasBusqueda.length === 0 ? (
+            <div style={styles.listaVacia}>No hay solicitudes que coincidan con la búsqueda</div>
           ) : (
             <div style={{ ...styles.listaScroll, ...(isMobile ? styles.listaScrollMobile : styles.listaScrollDesktop) }}>
-              {solicitudesFiltradas.map((solicitud) => {
+              {solicitudesFiltradasBusqueda.map((solicitud) => {
                 const badge = estadoBadge(solicitud.estado);
+                const esPendiente = solicitud.estado === 'EN_VALIDACION' || solicitud.estado === 'RADICADO';
+                const textoDiasHabiles = esPendiente
+                  ? obtenerTextoDiasHabilesRestantes(solicitud.fechaVencimiento)
+                  : null;
                 return (
                   <div
                     key={solicitud.id}
@@ -488,6 +672,11 @@ export default function PanelVerificador() {
                     <p style={{ ...styles.itemP, color: '#95a5a6', fontSize: '12px' }}>
                       Radicado: {formatearFechaHora(solicitud.fechaRadicacion)}
                     </p>
+                    {textoDiasHabiles ? (
+                      <p style={{ ...styles.itemP, color: textoDiasHabiles.startsWith('⚠️') ? '#b45309' : '#2563eb', fontSize: '12px', fontWeight: 600 }}>
+                        {textoDiasHabiles}
+                      </p>
+                    ) : null}
                   </div>
                 );
               })}
@@ -531,6 +720,7 @@ export default function PanelVerificador() {
                   <div style={styles.cardInfo}><span style={styles.label}>Estado</span><p style={styles.value}>{selectedSolicitud.estado}</p></div>
                   <div style={styles.cardInfo}><span style={styles.label}>Tipo Certificado</span><p style={styles.value}>{selectedSolicitud.tipo_certificado || 'No especificado'}</p></div>
                   <div style={styles.cardInfo}><span style={styles.label}>Fecha Radicación</span><p style={styles.value}>{formatearFechaHora(selectedSolicitud.fechaRadicacion)}</p></div>
+                  {textoDiasHabilesSeleccionada ? <div style={styles.cardInfo}><span style={styles.label}>Tiempo restante</span><p style={styles.value}>{textoDiasHabilesSeleccionada}</p></div> : null}
                   <div style={styles.cardInfo}><span style={styles.label}>Consecutivo Verificador</span><input style={styles.input} value={consecutivo} onChange={(e) => setConsecutivo(e.target.value.toUpperCase())} readOnly={!esPendienteSeleccionada} /></div>
                 </div>
               </div>

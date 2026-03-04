@@ -244,11 +244,6 @@ public class AuthController {
                         .body("❌ El nombre de usuario ya existe");
             }
 
-            if (!emailNormalizado.equalsIgnoreCase(usuario.getEmail()) && usuarioRepository.existsByEmail(emailNormalizado)) {
-                return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body("❌ El correo ya existe");
-            }
-
             usuario.setNombreCompleto(nombre);
             usuario.setUsername(username);
             usuario.setEmail(emailNormalizado);

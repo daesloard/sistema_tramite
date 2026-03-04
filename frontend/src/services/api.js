@@ -65,7 +65,7 @@ export async function consultarSolicitudesResueltas(numeroDocumento) {
 }
 
 export async function descargarCertificadoGenerado(tramiteId) {
-  const response = await fetch(`${API_URL}/${tramiteId}/documento-generado`);
+  const response = await fetch(`${API_URL}/${tramiteId}/documento-generado?accion=ver`);
   if (!response.ok) {
     const error = await response.text();
     throw new Error(error || 'No se pudo descargar el certificado');
@@ -87,7 +87,8 @@ export async function enviarAVerificacion(tramiteId, verificacion) {
   });
 
   if (!response.ok) {
-    throw new Error('No se pudo enviar a verificación');
+    const error = await response.text();
+    throw new Error(error || 'No se pudo enviar a verificación');
   }
   return response.json();
 }
