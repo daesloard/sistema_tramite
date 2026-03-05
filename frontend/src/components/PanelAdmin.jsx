@@ -33,6 +33,7 @@ const styles = {
   btnGuardarUsuarioDisabled: { background: '#9ca3af', cursor: 'not-allowed' },
   seccionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.8rem', marginBottom: '1rem', flexWrap: 'wrap' },
   btnToggleSeccion: { padding: '0.35rem 0.75rem', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', width: 'auto', whiteSpace: 'nowrap' },
+  btnRefrescar: { padding: '0.35rem 0.75rem', background: '#0f766e', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', width: 'auto', whiteSpace: 'nowrap' },
   filtrosCert: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', marginBottom: '10px' },
   inputFiltro: { width: '100%', border: '1px solid #cfd8dc', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', boxSizing: 'border-box' },
   listaCertificados: { display: 'grid', gap: '8px', maxHeight: '220px', overflowY: 'auto' },
@@ -186,18 +187,14 @@ export default function PanelAdmin({ usuarioActual }) {
   useEffect(() => {
     if (!usuarioActual?.username) return;
     cargarTramites();
-    cargarUsuariosOperativos();
-  }, [usuarioActual?.username, cargarTramites, cargarUsuariosOperativos]);
+  }, [usuarioActual?.username, cargarTramites]);
 
   useEffect(() => {
-    if (!usuarioActual?.username) return undefined;
-
-    const intervalo = setInterval(() => {
-      cargarTramites({ silenciosa: true });
-    }, 30000);
-
-    return () => clearInterval(intervalo);
-  }, [usuarioActual?.username, cargarTramites]);
+    if (!usuarioActual?.username) return;
+    if (!usuariosExpandido) return;
+    if (loadingUsuarios || usuariosOperativos.length > 0) return;
+    cargarUsuariosOperativos();
+  }, [usuarioActual?.username, usuariosExpandido, loadingUsuarios, usuariosOperativos.length, cargarUsuariosOperativos]);
 
   useEffect(() => {
     if (!tramiteExpandidoId) return;
@@ -608,7 +605,12 @@ export default function PanelAdmin({ usuarioActual }) {
       </div>
 
       <div style={styles.adminCard}>
-        <h2 style={styles.adminCardTitle}>Solicitudes Radicadas</h2>
+        <div style={styles.seccionHeader}>
+          <h2 style={{ ...styles.adminCardTitle, marginBottom: 0 }}>Solicitudes Radicadas</h2>
+          <button style={styles.btnRefrescar} onClick={() => cargarTramites()}>
+            {loading ? 'Actualizando...' : 'Refrescar'}
+          </button>
+        </div>
 
         <div style={styles.adminBusquedaWrap}>
           <input

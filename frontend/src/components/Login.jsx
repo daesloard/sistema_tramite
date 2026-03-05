@@ -118,11 +118,22 @@ export default function Login({ onLoginSuccess, rol }) {
         throw new Error('Debes ingresar usuario y contraseña');
       }
 
-      const response = await fetch(`${API_AUTH_URL}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: usernameLimpio, password: passwordLimpia })
-      });
+      let response;
+      for (let intento = 1; intento <= 2; intento += 1) {
+        try {
+          response = await fetch(`${API_AUTH_URL}/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: usernameLimpio, password: passwordLimpia })
+          });
+          break;
+        } catch (fetchError) {
+          if (intento === 2) {
+            throw fetchError;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+      }
 
       if (!response.ok) {
         const contentType = response.headers.get('content-type') || '';
@@ -160,7 +171,12 @@ export default function Login({ onLoginSuccess, rol }) {
       onLoginSuccess(data);
 
     } catch (err) {
-      setError(err.message);
+      const mensajeError = err?.message || 'Error de conexión';
+      if (mensajeError.toLowerCase().includes('failed to fetch')) {
+        setError('No se pudo conectar con el servidor. Si el backend está iniciando, espera unos segundos y vuelve a intentar.');
+      } else {
+        setError(mensajeError);
+      }
     } finally {
       setLoading(false);
     }

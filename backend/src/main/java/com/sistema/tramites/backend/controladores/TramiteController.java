@@ -51,6 +51,7 @@ public class TramiteController {
     private final NotificacionUsuarioService notificacionUsuarioService;
     private final CertificadoPreGeneracionAsyncService certificadoPreGeneracionAsyncService;
     private final CertificadoPostFirmaAsyncService certificadoPostFirmaAsyncService;
+    private final FirmaAlcaldeAsyncService firmaAlcaldeAsyncService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public TramiteController(TramiteRepository tramiteRepository, 
@@ -62,7 +63,8 @@ public class TramiteController {
                            AuditoriaTramiteService auditoriaTramiteService,
                            NotificacionUsuarioService notificacionUsuarioService,
                            CertificadoPreGeneracionAsyncService certificadoPreGeneracionAsyncService,
-                           CertificadoPostFirmaAsyncService certificadoPostFirmaAsyncService) {
+                           CertificadoPostFirmaAsyncService certificadoPostFirmaAsyncService,
+                           FirmaAlcaldeAsyncService firmaAlcaldeAsyncService) {
         this.tramiteRepository = tramiteRepository;
         this.workingDayCalculator = workingDayCalculator;
         this.emailService = emailService;
@@ -73,11 +75,15 @@ public class TramiteController {
         this.notificacionUsuarioService = notificacionUsuarioService;
         this.certificadoPreGeneracionAsyncService = certificadoPreGeneracionAsyncService;
         this.certificadoPostFirmaAsyncService = certificadoPostFirmaAsyncService;
+        this.firmaAlcaldeAsyncService = firmaAlcaldeAsyncService;
     }
 
     @GetMapping
-    public List<Tramite> listar() {
-        return tramiteRepository.findAll();
+    public List<Map<String, Object>> listar() {
+        return tramiteRepository.findAll()
+                .stream()
+                .map(this::construirResumenTramite)
+                .toList();
     }
 
     @GetMapping("/{id}")
@@ -664,30 +670,30 @@ public class TramiteController {
                     actualizado.getEstado()
                 );
 
-                Set<Long> destinatariosFirma = java.util.stream.Stream.concat(
-                        usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.ADMINISTRADOR).stream(),
-                        usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.VERIFICADOR).stream()
-                    )
-                    .map(Usuario::getId)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toSet());
-
-                notificacionUsuarioService.crearParaUsuarios(
-                    destinatariosFirma,
+            long inicioNotificacionInterna = System.nanoTime();
+            firmaAlcaldeAsyncService.notificarFirmaInterna(
                     actualizado.getId(),
-                    "Certificado firmado por alcalde",
-                    "El trámite " + actualizado.getNumeroRadicado() + " fue firmado por " + usuarioAlcalde.getUsername() + " y quedó FINALIZADO.",
-                    "SUCCESS"
-                );
+                    actualizado.getNumeroRadicado(),
+                    usuarioAlcalde.getUsername()
+            );
+            long duracionProgramacionNotificacionInterna = millisDesde(inicioNotificacionInterna);
 
             long duracionTotal = millisDesde(inicioTotal);
-                log.info("firma-alcalde tiempos tramite={} save={}ms postFirmaAsyncSchedule={}ms total={}ms",
+                log.info("firma-alcalde tiempos tramite={} save={}ms postFirmaAsyncSchedule={}ms notificacionInternaAsyncSchedule={}ms total={}ms",
                     actualizado.getId(),
                     duracionPersistencia,
                     duracionProgramacionPostFirma,
+                    duracionProgramacionNotificacionInterna,
                     duracionTotal);
-            
-            return ResponseEntity.ok(actualizado);
+
+            var respuesta = new java.util.HashMap<String, Object>();
+            respuesta.put("tramiteId", actualizado.getId());
+            respuesta.put("numeroRadicado", actualizado.getNumeroRadicado());
+            respuesta.put("estado", actualizado.getEstado() != null ? actualizado.getEstado().name() : null);
+            respuesta.put("fechaFirmaAlcalde", actualizado.getFechaFirmaAlcalde());
+            respuesta.put("mensaje", "Firma registrada. El certificado se está procesando y enviando.");
+
+            return ResponseEntity.ok(respuesta);
             
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -1316,6 +1322,32 @@ public class TramiteController {
 
     private String generarRadicado() {
         return "RES-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+    }
+
+    private Map<String, Object> construirResumenTramite(Tramite tramite) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", tramite.getId());
+        item.put("numeroRadicado", tramite.getNumeroRadicado());
+        item.put("nombreSolicitante", tramite.getNombreSolicitante());
+        item.put("tipoTramite", tramite.getTipoTramite());
+        item.put("estado", tramite.getEstado() != null ? tramite.getEstado().name() : null);
+        item.put("fechaRadicacion", tramite.getFechaRadicacion());
+        item.put("fechaVencimiento", tramite.getFechaVencimiento());
+        item.put("fechaVigencia", tramite.getFechaVigencia());
+        item.put("fechaVerificacion", tramite.getFechaVerificacion());
+        item.put("fechaFirmaAlcalde", tramite.getFechaFirmaAlcalde());
+        item.put("tipoDocumento", tramite.getTipoDocumento());
+        item.put("numeroDocumento", tramite.getNumeroDocumento());
+        item.put("lugarExpedicionDocumento", tramite.getLugarExpedicionDocumento());
+        item.put("direccionResidencia", tramite.getDireccionResidencia());
+        item.put("barrioResidencia", tramite.getBarrioResidencia());
+        item.put("telefono", tramite.getTelefono());
+        item.put("correoElectronico", tramite.getCorreoElectronico());
+        item.put("tipo_certificado", tramite.getTipo_certificado());
+        item.put("observaciones", tramite.getObservaciones());
+        item.put("consecutivoVerificador", tramite.getConsecutivoVerificador());
+        item.put("ruta_certificado_final", tramite.getRuta_certificado_final());
+        return item;
     }
 }
 
