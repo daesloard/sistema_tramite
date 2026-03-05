@@ -91,6 +91,7 @@ public class DocumentoGeneradoService {
     private static final int FIRMA_ANCHO_PX = 220;
     private static final int FIRMA_ALTO_PX = 80;
     private static final String FUENTE_MAVEN_PRO = "Maven Pro";
+    private static final String FUENTE_MAVEN_PRO_ALIAS = "MavenPro";
     private static final String RECURSO_MAVEN_PRO_TTF = "classpath:fonts/MavenPro[wght].ttf";
 
     private final ResourceLoader resourceLoader;
@@ -101,6 +102,7 @@ public class DocumentoGeneradoService {
     private final String certificadoP12Alias;
     private volatile CertBundle certBundleCache;
     private volatile PhysicalFont fuenteMavenProCache;
+    private volatile PhysicalFont fuenteMavenProBoldCache;
 
     static {
         if (Security.getProvider("BC") == null) {
@@ -756,6 +758,13 @@ public class DocumentoGeneradoService {
         CTSpacing spacing = pPr.isSetSpacing() ? pPr.getSpacing() : pPr.addNewSpacing();
 
         String textoLower = texto.toLowerCase(LOCALE_ES);
+        boolean esParrafoSuscrito = textoLower.contains("el suscrito alcalde");
+        if (esParrafoSuscrito) {
+            spacing.setBefore(ESPACIO_DOS);
+            spacing.setAfter(ESPACIO_DOS);
+            return true;
+        }
+
         boolean esLineaFirma = textoLower.contains("alcalde municipal");
         if (esLineaFirma) {
             spacing.setBefore(ESPACIO_FIRMA);
@@ -1142,8 +1151,7 @@ public class DocumentoGeneradoService {
             Mapper fontMapper = new IdentityPlusMapper();
             PhysicalFont fuenteMavenPro = registrarFuenteMavenProSiDisponible();
             if (fuenteMavenPro != null) {
-                fontMapper.put(FUENTE_MAVEN_PRO, fuenteMavenPro);
-                fontMapper.put("MavenPro", fuenteMavenPro);
+                mapearFuenteMavenPro(fontMapper, fuenteMavenPro, resolverFuenteMavenProBold());
             }
             wordMLPackage.setFontMapper(fontMapper);
 
@@ -1172,6 +1180,7 @@ public class DocumentoGeneradoService {
             PhysicalFont existente = PhysicalFonts.get(FUENTE_MAVEN_PRO);
             if (existente != null) {
                 fuenteMavenProCache = existente;
+                fuenteMavenProBoldCache = buscarFuenteMavenProEnCatalogo(true);
                 return fuenteMavenProCache;
             }
 
@@ -1187,21 +1196,18 @@ public class DocumentoGeneradoService {
                 Files.copy(input, temporal, StandardCopyOption.REPLACE_EXISTING);
                 temporal.toFile().deleteOnExit();
 
-                PhysicalFonts.addPhysicalFont(temporal.toUri());
-                fuenteMavenProCache = PhysicalFonts.get(FUENTE_MAVEN_PRO);
-                if (fuenteMavenProCache == null) {
-                    for (Map.Entry<String, PhysicalFont> entry : PhysicalFonts.getPhysicalFonts().entrySet()) {
-                        String nombreFuente = entry.getKey();
-                        if (nombreFuente != null && nombreFuente.toLowerCase(LOCALE_ES).contains("maven")) {
-                            fuenteMavenProCache = entry.getValue();
-                            break;
-                        }
-                    }
-                }
+                PhysicalFonts.addPhysicalFonts(FUENTE_MAVEN_PRO, temporal.toUri());
+                fuenteMavenProCache = buscarFuenteMavenProEnCatalogo(false);
+                fuenteMavenProBoldCache = buscarFuenteMavenProEnCatalogo(true);
                 if (fuenteMavenProCache == null) {
                     logger.warn("Se cargó {} pero docx4j no registró '{}' por nombre.", RECURSO_MAVEN_PRO_TTF, FUENTE_MAVEN_PRO);
                 } else {
                     logger.info("Fuente '{}' registrada para conversión PDF desde {}", FUENTE_MAVEN_PRO, RECURSO_MAVEN_PRO_TTF);
+                    if (fuenteMavenProBoldCache != null) {
+                        logger.info("Variante en negrita de '{}' detectada en catálogo de docx4j", FUENTE_MAVEN_PRO);
+                    } else {
+                        logger.warn("No se detectó variante bold explícita de '{}'; se usará fallback con la variante regular", FUENTE_MAVEN_PRO);
+                    }
                 }
                 return fuenteMavenProCache;
             } catch (Exception ex) {
@@ -1215,6 +1221,66 @@ public class DocumentoGeneradoService {
                 return null;
             }
         }
+    }
+
+    private void mapearFuenteMavenPro(Mapper fontMapper, PhysicalFont regular, PhysicalFont bold) {
+        if (fontMapper == null || regular == null) {
+            return;
+        }
+
+        PhysicalFont boldOrRegular = bold != null ? bold : regular;
+        String[] aliases = new String[]{FUENTE_MAVEN_PRO, FUENTE_MAVEN_PRO_ALIAS};
+
+        for (String alias : aliases) {
+            fontMapper.put(alias, regular);
+            fontMapper.registerRegularForm(alias, regular);
+            fontMapper.registerItalicForm(alias, regular);
+            fontMapper.registerBoldForm(alias, boldOrRegular);
+            fontMapper.registerBoldItalicForm(alias, boldOrRegular);
+        }
+    }
+
+    private PhysicalFont resolverFuenteMavenProBold() {
+        if (fuenteMavenProBoldCache != null) {
+            return fuenteMavenProBoldCache;
+        }
+
+        synchronized (this) {
+            if (fuenteMavenProBoldCache != null) {
+                return fuenteMavenProBoldCache;
+            }
+            fuenteMavenProBoldCache = buscarFuenteMavenProEnCatalogo(true);
+            return fuenteMavenProBoldCache;
+        }
+    }
+
+    private PhysicalFont buscarFuenteMavenProEnCatalogo(boolean bold) {
+        PhysicalFont firstMaven = null;
+        for (Map.Entry<String, PhysicalFont> entry : PhysicalFonts.getPhysicalFonts().entrySet()) {
+            String nombreFuente = entry.getKey();
+            if (nombreFuente == null) {
+                continue;
+            }
+
+            String lower = nombreFuente.toLowerCase(LOCALE_ES);
+            if (!lower.contains("maven")) {
+                continue;
+            }
+
+            if (firstMaven == null) {
+                firstMaven = entry.getValue();
+            }
+
+            boolean esBold = lower.contains("bold") || lower.contains("black") || lower.contains("extrabold");
+            if (bold && esBold) {
+                return entry.getValue();
+            }
+
+            if (!bold && !esBold) {
+                return entry.getValue();
+            }
+        }
+        return firstMaven;
     }
 
     private byte[] convertirDocxConLibreOffice(byte[] docxContenido) {
