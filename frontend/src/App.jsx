@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Component, Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { API_NOTIFICACIONES_URL } from './config/api';
 import { formatearFechaHora as formatearFechaHoraUtil } from './utils/dateFormat';
@@ -32,6 +32,55 @@ const styles = getAppStyles();
 
 function CargandoModulo({ texto = 'Cargando módulo...' }) {
   return <div style={styles.moduloLoading}>{texto}</div>;
+}
+
+class PanelErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    console.error('Error en panel:', error);
+  }
+
+  render() {
+    if (!this.state.hasError) {
+      return this.props.children;
+    }
+
+    return (
+      <div style={styles.moduloErrorWrap}>
+        <div style={styles.moduloErrorCard}>
+          <h3 style={styles.moduloErrorTitle}>No se pudo cargar este panel</h3>
+          <p style={styles.moduloErrorText}>
+            Ocurrió un error inesperado y se evitó que la aplicación quedara en blanco.
+            Puedes volver a intentar o regresar al inicio.
+          </p>
+          <div style={styles.moduloErrorButtonRow}>
+            <button
+              type="button"
+              style={styles.moduloErrorButton}
+              onClick={this.props.onRetry}
+            >
+              Reintentar
+            </button>
+            <button
+              type="button"
+              style={styles.moduloErrorButton}
+              onClick={this.props.onGoHome}
+            >
+              Ir al inicio
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 }
 
 const obtenerUsuarioGuardado = () => {
@@ -305,9 +354,11 @@ export default function App() {
           rolEsperado: 'VERIFICADOR',
           etiquetaRol: '👤 Verificador',
           contenido: (
-            <Suspense fallback={<CargandoModulo texto="Cargando panel de verificador..." />}>
-              <PanelVerificador />
-            </Suspense>
+            <PanelErrorBoundary onRetry={() => navigate(0)} onGoHome={() => navigate('/')}>
+              <Suspense fallback={<CargandoModulo texto="Cargando panel de verificador..." />}>
+                <PanelVerificador />
+              </Suspense>
+            </PanelErrorBoundary>
           ),
         })}
       />
@@ -318,9 +369,11 @@ export default function App() {
           rolEsperado: 'ALCALDE',
           etiquetaRol: '👨‍⚖️ Alcalde',
           contenido: (
-            <Suspense fallback={<CargandoModulo texto="Cargando panel de alcalde..." />}>
-              <PanelAlcalde />
-            </Suspense>
+            <PanelErrorBoundary onRetry={() => navigate(0)} onGoHome={() => navigate('/')}>
+              <Suspense fallback={<CargandoModulo texto="Cargando panel de alcalde..." />}>
+                <PanelAlcalde />
+              </Suspense>
+            </PanelErrorBoundary>
           ),
         })}
       />
@@ -333,9 +386,11 @@ export default function App() {
           titulo: 'Panel Administrativo',
           etiquetaRol: '⚙️ Administrador',
           contenido: (
-            <Suspense fallback={<CargandoModulo texto="Cargando panel administrativo..." />}>
-              <PanelAdmin usuarioActual={usuarioActual} />
-            </Suspense>
+            <PanelErrorBoundary onRetry={() => navigate(0)} onGoHome={() => navigate('/')}>
+              <Suspense fallback={<CargandoModulo texto="Cargando panel administrativo..." />}>
+                <PanelAdmin usuarioActual={usuarioActual} />
+              </Suspense>
+            </PanelErrorBoundary>
           ),
         })}
       />
