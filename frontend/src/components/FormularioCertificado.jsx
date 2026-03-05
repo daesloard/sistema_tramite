@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { radicarCertificadoResidencia } from '../services/api';
-import { API_TRAMITES_URL } from '../config/api';
 
 const styles = {
   formularioContenedor: {
@@ -206,62 +205,6 @@ export default function FormularioCertificado({ onIrAVerificar }) {
     }
   };
 
-  const base64ToBlob = (base64, contentType) => {
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type: contentType || 'application/octet-stream' });
-  };
-
-  const subirCertificado = async (tramiteId) => {
-    if (!formData.certificado_base64) return;
-
-    const tipoCertificado = formData.tipo_certificado?.toLowerCase() || 'sisben';
-    const tipoRuta = tipoCertificado === 'electoral'
-      ? 'electoral'
-      : tipoCertificado === 'jac'
-        ? 'residencia'
-        : 'sisben';
-
-    const blob = base64ToBlob(formData.certificado_base64, formData.certificado_tipo);
-    const nombreArchivo = formData.certificado_nombre || `certificado_${tipoRuta}`;
-
-    const payload = new FormData();
-    payload.append('file', blob, nombreArchivo);
-
-    const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/upload-${tipoRuta}`, {
-      method: 'POST',
-      body: payload,
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(error || 'No se pudo cargar el certificado');
-    }
-  };
-
-  const resolverTramiteId = async (respuestaRadicacion) => {
-    if (respuestaRadicacion?.tramiteId) {
-      return respuestaRadicacion.tramiteId;
-    }
-
-    if (!respuestaRadicacion?.numeroRadicado) {
-      return null;
-    }
-
-    const response = await fetch(API_TRAMITES_URL);
-    if (!response.ok) {
-      return null;
-    }
-
-    const tramites = await response.json();
-    const tramite = tramites.find((item) => item.numeroRadicado === respuestaRadicacion.numeroRadicado);
-    return tramite?.id || null;
-  };
-
   const validarPaso = () => {
     switch (paso) {
       case 2:
@@ -332,11 +275,8 @@ export default function FormularioCertificado({ onIrAVerificar }) {
       };
 
       const respuesta = await radicarCertificadoResidencia(solicitud);
-      const tramiteId = await resolverTramiteId(respuesta);
-      if (tramiteId) {
-        await subirCertificado(tramiteId);
-      } else {
-        throw new Error('No fue posible obtener el ID del trámite para subir el certificado');
+      if (!respuesta?.tramiteId) {
+        throw new Error('No fue posible confirmar el ID del trámite radicado');
       }
       setRadicacion(respuesta);
       setPaso(5);
