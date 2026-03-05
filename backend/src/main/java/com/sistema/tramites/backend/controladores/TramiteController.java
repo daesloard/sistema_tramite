@@ -49,7 +49,8 @@ public class TramiteController {
     private final DriveStorageService driveStorageService;
     private final AuditoriaTramiteService auditoriaTramiteService;
     private final NotificacionUsuarioService notificacionUsuarioService;
-    private final CertificadoDriveAsyncService certificadoDriveAsyncService;
+    private final CertificadoPreGeneracionAsyncService certificadoPreGeneracionAsyncService;
+    private final CertificadoPostFirmaAsyncService certificadoPostFirmaAsyncService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public TramiteController(TramiteRepository tramiteRepository, 
@@ -60,7 +61,8 @@ public class TramiteController {
                            DriveStorageService driveStorageService,
                            AuditoriaTramiteService auditoriaTramiteService,
                            NotificacionUsuarioService notificacionUsuarioService,
-                           CertificadoDriveAsyncService certificadoDriveAsyncService) {
+                           CertificadoPreGeneracionAsyncService certificadoPreGeneracionAsyncService,
+                           CertificadoPostFirmaAsyncService certificadoPostFirmaAsyncService) {
         this.tramiteRepository = tramiteRepository;
         this.workingDayCalculator = workingDayCalculator;
         this.emailService = emailService;
@@ -69,7 +71,8 @@ public class TramiteController {
         this.driveStorageService = driveStorageService;
         this.auditoriaTramiteService = auditoriaTramiteService;
         this.notificacionUsuarioService = notificacionUsuarioService;
-        this.certificadoDriveAsyncService = certificadoDriveAsyncService;
+        this.certificadoPreGeneracionAsyncService = certificadoPreGeneracionAsyncService;
+        this.certificadoPostFirmaAsyncService = certificadoPostFirmaAsyncService;
     }
 
     @GetMapping
@@ -395,6 +398,9 @@ public class TramiteController {
                 tramite.setFechaVerificacion(LocalDateTime.now());
                 LocalDate inicioVigencia = guardadoFechaRadicacion(tramite);
                 tramite.setFechaVigencia(workingDayCalculator.calcularFechaVigencia(inicioVigencia));
+                if (tramite.getCodigoVerificacion() == null || tramite.getCodigoVerificacion().isBlank()) {
+                    tramite.setCodigoVerificacion(generarCodigoVerificacion(tramite.getNumeroRadicado()));
+                }
             } else {
                 tramite.setEstado(EstadoTramite.RECHAZADO);
                 tramite.setFechaVerificacion(LocalDateTime.now());
@@ -416,6 +422,9 @@ public class TramiteController {
             }
             
             Tramite actualizado = tramiteRepository.save(tramite);
+            if (verificacion.isAprobado()) {
+                certificadoPreGeneracionAsyncService.pregenerarCertificadoParaFirma(actualizado.getId());
+            }
                 String accionAuditoria = verificacion.isAprobado() ? "VERIFICACION_APROBADA" : "VERIFICACION_RECHAZADA";
                 auditoriaTramiteService.registrarEvento(
                     actualizado.getId(),
@@ -629,7 +638,6 @@ public class TramiteController {
                     .body("El trámite no está en estado EN_FIRMA");
                 }
 
-            long inicioGeneracion = System.nanoTime();
             tramite.setEstado(EstadoTramite.FINALIZADO);
             tramite.setFirmaAlcalde("FIRMADO_POR_" + usernameFirma.toUpperCase());
             tramite.setFechaFirmaAlcalde(LocalDateTime.now());
@@ -637,23 +645,15 @@ public class TramiteController {
             if (tramite.getCodigoVerificacion() == null || tramite.getCodigoVerificacion().isBlank()) {
                 tramite.setCodigoVerificacion(generarCodigoVerificacion(tramite.getNumeroRadicado()));
             }
-            documentoGeneradoService.generarYAdjuntarPdf(tramite, true, "");
-            long duracionGeneracion = millisDesde(inicioGeneracion);
-
-            long inicioHash = System.nanoTime();
-            tramite.setHashDocumentoGenerado(calcularHashSha256(tramite.getContenidoPdfGenerado()));
-            long duracionHash = millisDesde(inicioHash);
 
             long inicioPersistencia = System.nanoTime();
             
             Tramite actualizado = tramiteRepository.save(tramite);
             long duracionPersistencia = millisDesde(inicioPersistencia);
 
-            long inicioDrive = System.nanoTime();
-            if (driveStorageService.isEnabled()) {
-                certificadoDriveAsyncService.subirCertificadoFirmado(actualizado.getId());
-            }
-            long duracionProgramacionDrive = millisDesde(inicioDrive);
+            long inicioPostFirma = System.nanoTime();
+            certificadoPostFirmaAsyncService.procesarPostFirma(actualizado.getId());
+            long duracionProgramacionPostFirma = millisDesde(inicioPostFirma);
 
                 auditoriaTramiteService.registrarEvento(
                     actualizado.getId(),
@@ -679,28 +679,12 @@ public class TramiteController {
                     "El trámite " + actualizado.getNumeroRadicado() + " fue firmado por " + usuarioAlcalde.getUsername() + " y quedó FINALIZADO.",
                     "SUCCESS"
                 );
-            
-            // Enviar documento final al usuario
-            long inicioCorreo = System.nanoTime();
-            emailService.enviarDocumentoFinal(
-                    tramite.getCorreoElectronico(),
-                    tramite.getNombreSolicitante(),
-                    tramite.getNumeroRadicado(),
-                    true,
-                    "",
-                    tramite.getContenidoPdfGenerado(),
-                    tramite.getNombrePdfGenerado()
-            );
-            long duracionCorreo = millisDesde(inicioCorreo);
 
             long duracionTotal = millisDesde(inicioTotal);
-            log.info("firma-alcalde tiempos tramite={} pdf={}ms hash={}ms save={}ms driveAsyncSchedule={}ms emailAsyncDispatch={}ms total={}ms",
+                log.info("firma-alcalde tiempos tramite={} save={}ms postFirmaAsyncSchedule={}ms total={}ms",
                     actualizado.getId(),
-                    duracionGeneracion,
-                    duracionHash,
                     duracionPersistencia,
-                    duracionProgramacionDrive,
-                    duracionCorreo,
+                    duracionProgramacionPostFirma,
                     duracionTotal);
             
             return ResponseEntity.ok(actualizado);

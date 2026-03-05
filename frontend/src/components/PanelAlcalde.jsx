@@ -360,7 +360,7 @@ export default function PanelAlcalde() {
         throw new Error(msg || 'Error al firmar. Verifica la contraseña.');
       }
 
-      mostrarAvisoPanel('success', 'Certificado firmado exitosamente. Se enviará al solicitante.');
+      mostrarAvisoPanel('success', 'Certificado firmado exitosamente. El PDF se está preparando y se enviará al solicitante en breve.');
       setSelectedSolicitud(null);
       setFirmaDigital('');
       await cargarSolicitudes();
