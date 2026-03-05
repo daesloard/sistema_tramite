@@ -1,80 +1,12 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { API_AUTH_URL, API_TRAMITES_URL } from '../config/api';
 import { listarTramites } from '../services/api';
+import { formatearFecha as formatearFechaUtil, formatearFechaHora as formatearFechaHoraUtil } from '../utils/dateFormat';
+import { filtrarCertificadosGenerados } from '../utils/certificateFilters';
+import AvisoModal from './common/AvisoModal';
 
-const styles = {
-  adminContenedor: { maxWidth: '1200px', margin: '0 auto', padding: 'clamp(0.9rem, 4vw, 2rem)' },
-  adminCard: { background: '#fff', borderRadius: '8px', padding: 'clamp(1rem, 4vw, 2rem)', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' },
-  adminCardTitle: { color: '#333', marginBottom: '1.5rem' },
-  adminBusquedaWrap: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' },
-  adminBusquedaInput: { width: 'min(520px, 100%)', border: '1px solid #cfd8dc', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', boxSizing: 'border-box' },
-  adminBusquedaMeta: { margin: 0, fontSize: '12px', color: '#6b7280' },
-  adminDetalle: { border: '1px solid #e5e7eb', borderRadius: '8px', background: '#f9fafb', padding: '0.8rem' },
-  adminDetalleTitle: { margin: '0 0 0.8rem 0', color: '#1f2937', fontSize: '1rem' },
-  adminDetalleGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.6rem 1rem' },
-  adminDetalleItem: { margin: 0, color: '#374151', fontSize: '0.92rem' },
-  adminDetalleLabel: { fontWeight: 700, color: '#111827' },
-  tablaWrapper: { overflowX: 'auto', overflowY: 'auto', maxHeight: '420px' },
-  tabla: { width: '100%', borderCollapse: 'collapse' },
-  th: { padding: '0.75rem', textAlign: 'left', fontWeight: 600, color: '#333', borderBottom: '2px solid #ddd', background: 'linear-gradient(135deg, #667eea15, #764ba215)' },
-  td: { padding: '0.75rem', borderBottom: '1px solid #eee', color: '#666' },
-  celdaRadicado: { fontFamily: 'Courier New, monospace', fontWeight: 'bold', color: '#667eea', letterSpacing: '0.5px' },
-  badge: { display: 'inline-block', padding: '0.4rem 0.8rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 600 },
-  btnVer: { padding: '0.5rem 1rem', background: '#667eea', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 },
-  usuariosCard: { background: '#fff', borderRadius: '8px', padding: 'clamp(1rem, 4vw, 2rem)', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', marginBottom: '1rem' },
-  usuariosTitulo: { color: '#333', marginBottom: '1rem' },
-  usuariosGrid: { display: 'grid', gap: '0.75rem' },
-  usuarioItem: { border: '1px solid #e5e7eb', borderRadius: '8px', padding: '0.75rem', background: '#fafafa' },
-  usuarioFila: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem', alignItems: 'end' },
-  usuarioLabel: { display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px', fontWeight: 600 },
-  usuarioInput: { width: '100%', padding: '8px 10px', border: '1px solid #cfd8dc', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' },
-  usuarioMeta: { fontSize: '12px', color: '#4b5563', marginTop: '6px' },
-  btnGuardarUsuario: { padding: '8px 12px', border: 'none', borderRadius: '6px', background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600 },
-  btnGuardarUsuarioDisabled: { background: '#9ca3af', cursor: 'not-allowed' },
-  seccionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.8rem', marginBottom: '1rem', flexWrap: 'wrap' },
-  btnToggleSeccion: { padding: '0.35rem 0.75rem', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', width: 'auto', whiteSpace: 'nowrap' },
-  btnRefrescar: { padding: '0.35rem 0.75rem', background: '#0f766e', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', width: 'auto', whiteSpace: 'nowrap' },
-  filtrosCert: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', marginBottom: '10px' },
-  inputFiltro: { width: '100%', border: '1px solid #cfd8dc', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', boxSizing: 'border-box' },
-  listaCertificados: { display: 'grid', gap: '8px', maxHeight: '220px', overflowY: 'auto' },
-  certItem: { border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 10px', background: '#f9fafb' },
-  certMeta: { margin: '2px 0', fontSize: '12px', color: '#4b5563' },
-  adminDocs: { marginTop: '0.9rem', display: 'flex', flexDirection: 'column', gap: '8px' },
-  adminDocItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fff' },
-  adminDocLabel: { color: '#1f2937', fontSize: '0.9rem', fontWeight: 600 },
-  adminDocBtns: { display: 'flex', gap: '8px' },
-  btnDocVer: { padding: '6px 10px', border: 'none', borderRadius: '6px', background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '12px' },
-  btnDocDesc: { padding: '6px 10px', border: 'none', borderRadius: '6px', background: '#059669', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '12px' },
-  btnNotificarVerificador: { padding: '8px 12px', border: 'none', borderRadius: '6px', background: '#d97706', color: '#fff', cursor: 'pointer', fontWeight: 600, marginTop: '10px' },
-  inputAdminMensaje: { width: '100%', border: '1px solid #cfd8dc', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', boxSizing: 'border-box', marginTop: '10px' },
-  adminNota: { marginTop: '8px', fontSize: '12px', color: '#6b7280' },
-  avisoOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(17, 24, 39, 0.35)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '16px',
-    zIndex: 120,
-  },
-  panelAviso: { width: 'min(92vw, 520px)', padding: '14px 16px', borderRadius: '10px', border: '1px solid transparent', boxShadow: '0 10px 30px rgba(0,0,0,0.22)' },
-  panelAvisoTexto: { margin: 0, fontSize: '14px', fontWeight: 600, lineHeight: 1.45 },
-  panelAvisoAcciones: { marginTop: '12px', display: 'flex', justifyContent: 'flex-end' },
-  panelAvisoCerrar: { border: 'none', background: '#1f2937', color: '#fff', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, lineHeight: 1, padding: '8px 10px' },
-  panelAvisoError: { background: '#ffebee', borderColor: '#ef5350', color: '#b71c1c' },
-  panelAvisoExito: { background: '#e8f5e9', borderColor: '#81c784', color: '#1b5e20' },
-  panelAvisoInfo: { background: '#e3f2fd', borderColor: '#64b5f6', color: '#0d47a1' },
-  panelAvisoWarning: { background: '#fff4e5', borderColor: '#f59e0b', color: '#92400e' },
-  adminAuditoria: { marginTop: '1rem', borderTop: '1px dashed #d1d5db', paddingTop: '0.9rem' },
-  adminAuditoriaLista: { display: 'grid', gap: '8px', maxHeight: '220px', overflowY: 'auto' },
-  adminAuditoriaItem: { border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fff', padding: '8px 10px' },
-  adminAuditoriaMeta: { margin: '2px 0', fontSize: '12px', color: '#374151' },
-  adminAuditoriaAccion: { margin: '0 0 4px 0', fontSize: '12px', fontWeight: 700, color: '#111827' },
-  badgeDocsPendientes: { display: 'inline-block', marginTop: '6px', padding: '4px 8px', borderRadius: '999px', background: '#fff3e0', color: '#b45309', fontSize: '11px', fontWeight: 700 },
-  badgeDocsOk: { display: 'inline-block', marginTop: '6px', padding: '4px 8px', borderRadius: '999px', background: '#e8f5e9', color: '#15803d', fontSize: '11px', fontWeight: 700 },
-  faltantesTexto: { margin: '6px 0 0 0', fontSize: '12px', color: '#92400e' },
-};
+import { getPanelAdminStyles } from '../styles/components/PanelAdminStyles';
+const styles = getPanelAdminStyles();
 
 const getEstadoBadgeStyle = (estado) => {
   const key = (estado || '').toLowerCase();
@@ -85,26 +17,9 @@ const getEstadoBadgeStyle = (estado) => {
   return { background: '#ffebee', color: '#d32f2f' };
 };
 
-const formatoFecha = (valor) => {
-  if (!valor) return '-';
-  const fecha = new Date(valor);
-  if (Number.isNaN(fecha.getTime())) return '-';
-  return fecha.toLocaleDateString('es-CO');
-};
+const formatoFecha = (valor) => formatearFechaUtil(valor, { fallback: '-' });
 
-const formatoFechaHora = (valor) => {
-  if (!valor) return '-';
-  const fecha = new Date(valor);
-  if (Number.isNaN(fecha.getTime())) return '-';
-  return fecha.toLocaleString('es-CO', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-};
+const formatoFechaHora = (valor) => formatearFechaHoraUtil(valor, { fallback: '-', incluirSegundos: true });
 
 export default function PanelAdmin({ usuarioActual }) {
   const filasTramiteRef = useRef({});
@@ -133,13 +48,6 @@ export default function PanelAdmin({ usuarioActual }) {
 
   const mostrarAvisoAdmin = (tipo, mensaje) => {
     setAvisoAdmin({ tipo, mensaje });
-  };
-
-  const obtenerEstiloAvisoAdmin = (tipo) => {
-    if (tipo === 'success') return styles.panelAvisoExito;
-    if (tipo === 'warning') return styles.panelAvisoWarning;
-    if (tipo === 'info') return styles.panelAvisoInfo;
-    return styles.panelAvisoError;
   };
 
   const cargarTramites = useCallback(async ({ silenciosa = false } = {}) => {
@@ -273,16 +181,11 @@ export default function PanelAdmin({ usuarioActual }) {
     }
   };
 
-  const certificadosGeneradosFiltrados = useMemo(() => tramites
-    .filter((t) => t.estado === 'FINALIZADO' || t.estado === 'RECHAZADO')
-    .filter((t) => {
-      const matchRadicado = (t.numeroRadicado || '').toLowerCase().includes(filtroCertRadicado.toLowerCase().trim());
-      const matchNombre = (t.nombreSolicitante || '').toLowerCase().includes(filtroCertNombre.toLowerCase().trim());
-      const matchTipo = filtroCertTipo === 'todos'
-        || (filtroCertTipo === 'positiva' && t.estado === 'FINALIZADO')
-        || (filtroCertTipo === 'negativa' && t.estado === 'RECHAZADO');
-      return matchRadicado && matchNombre && matchTipo;
-    }), [tramites, filtroCertRadicado, filtroCertNombre, filtroCertTipo]);
+  const certificadosGeneradosFiltrados = useMemo(() => filtrarCertificadosGenerados(tramites, {
+    radicado: filtroCertRadicado,
+    nombre: filtroCertNombre,
+    tipo: filtroCertTipo,
+  }), [tramites, filtroCertRadicado, filtroCertNombre, filtroCertTipo]);
 
   const textoBusquedaAdmin = busquedaAdmin.trim().toLowerCase();
   const tramitesFiltradosAdmin = useMemo(() => tramites.filter((tramite) => {
@@ -529,16 +432,7 @@ export default function PanelAdmin({ usuarioActual }) {
 
   return (
     <main style={styles.adminContenedor}>
-      {avisoAdmin ? (
-        <div style={styles.avisoOverlay} onClick={() => setAvisoAdmin(null)}>
-          <div style={{ ...styles.panelAviso, ...obtenerEstiloAvisoAdmin(avisoAdmin.tipo) }} onClick={(e) => e.stopPropagation()}>
-            <p style={styles.panelAvisoTexto}>{avisoAdmin.mensaje}</p>
-            <div style={styles.panelAvisoAcciones}>
-              <button style={styles.panelAvisoCerrar} onClick={() => setAvisoAdmin(null)} aria-label="Cerrar aviso">Entendido</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <AvisoModal aviso={avisoAdmin} onClose={() => setAvisoAdmin(null)} />
 
       <div style={styles.usuariosCard}>
         <div style={styles.seccionHeader}>

@@ -85,7 +85,8 @@ public class DocumentoGeneradoService {
     private static final Logger logger = LoggerFactory.getLogger(DocumentoGeneradoService.class);
     private static final java.math.BigInteger ESPACIO_UNO = java.math.BigInteger.valueOf(240L);
     private static final java.math.BigInteger ESPACIO_DOS = java.math.BigInteger.valueOf(480L);
-    private static final java.math.BigInteger ESPACIO_FIRMA = java.math.BigInteger.valueOf(120L);
+    private static final java.math.BigInteger ESPACIO_TRES = java.math.BigInteger.valueOf(720L);
+    private static final java.math.BigInteger ESPACIO_FIRMA = java.math.BigInteger.ZERO;
     private static final String MARCADOR_FIRMA_ANGULAR = "<<firma.jpeg>>";
     private static final String MARCADOR_FIRMA_GUILLEMET = "«firma.jpeg»";
     private static final int FIRMA_ANCHO_PX = 220;
@@ -760,8 +761,16 @@ public class DocumentoGeneradoService {
         String textoLower = texto.toLowerCase(LOCALE_ES);
         boolean esParrafoSuscrito = textoLower.contains("el suscrito alcalde");
         if (esParrafoSuscrito) {
-            spacing.setBefore(ESPACIO_DOS);
-            spacing.setAfter(ESPACIO_DOS);
+            // Ajuste visual solicitado: +1 espacio antes del encabezado y -1 espacio debajo.
+            spacing.setBefore(ESPACIO_TRES);
+            spacing.setAfter(ESPACIO_UNO);
+            return true;
+        }
+
+        boolean esHaceConstar = textoLower.contains("hace constar");
+        if (esHaceConstar) {
+            // Ajuste visual solicitado: reducir separación entre "HACE CONSTAR" y el cuerpo.
+            spacing.setAfter(ESPACIO_UNO);
             return true;
         }
 

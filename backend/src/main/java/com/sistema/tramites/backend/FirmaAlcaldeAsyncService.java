@@ -43,7 +43,7 @@ public class FirmaAlcaldeAsyncService {
                     destinatariosFirma,
                     tramiteId,
                     "Certificado firmado por alcalde",
-                    "El trámite " + numeroRadicado + " fue firmado por " + alcalde + " y quedó FINALIZADO.",
+                    "El trámite " + numeroRadicado + " fue firmado por " + alcalde + " y está en procesamiento final.",
                     "SUCCESS"
             );
         } catch (Exception ex) {

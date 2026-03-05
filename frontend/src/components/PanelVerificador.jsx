@@ -1,95 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { API_TRAMITES_URL } from '../config/api';
+import { formatearFechaHora as formatearFechaHoraUtil } from '../utils/dateFormat';
+import { buildUsernameHeader, getStoredUser } from '../utils/userSession';
+import { filtrarCertificadosGenerados } from '../utils/certificateFilters';
+import AvisoModal from './common/AvisoModal';
 
+import { getPanelVerificadorStyles } from '../styles/components/PanelVerificadorStyles';
 const FILTROS = [
   { key: 'pendientes', label: 'Pendientes', titulo: '📋 Solicitudes Pendientes' },
   { key: 'aprobadas', label: 'Aprobadas', titulo: '✅ Solicitudes Aprobadas' },
   { key: 'negadas', label: 'Negadas', titulo: '❌ Solicitudes Negadas' },
 ];
 
-const styles = {
-  loading: { textAlign: 'center', padding: '40px', fontSize: '16px', color: '#7f8c8d' },
-  contenedor: { maxWidth: '1600px', margin: '0 auto', padding: 'clamp(0.75rem, 3.5vw, 1.25rem)', background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)', minHeight: '100vh' },
-  header: { background: '#fff', padding: 'clamp(0.9rem, 4vw, 1.5rem)', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,.08)', marginBottom: '20px' },
-  h2: { margin: '0 0 8px 0', color: '#2c3e50', fontSize: 'clamp(1.15rem, 5vw, 1.75rem)' },
-  subtitle: { margin: 0, color: '#7f8c8d', fontSize: '14px' },
-  filtros: { display: 'flex', gap: '8px', marginTop: '14px', flexWrap: 'nowrap', overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' },
-  btnFiltro: { border: '1px solid #cfd8dc', background: '#fff', color: '#2c3e50', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, width: 'auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto', whiteSpace: 'nowrap', fontSize: '0.85rem' },
-  btnFiltroActivo: { background: '#2d7ff9', color: '#fff', borderColor: '#2d7ff9' },
-  btnConsolidado: { border: 'none', background: '#2d7ff9', color: '#fff', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, marginTop: '8px', width: 'auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap', fontSize: '0.85rem' },
-  error: { background: '#ffe0e0', border: '1px solid #ff6b6b', color: '#c92a2a', padding: '16px', borderRadius: '8px', marginBottom: '20px' },
-  layout: { display: 'grid', gap: '14px' },
-  layoutDesktop: { gridTemplateColumns: '420px minmax(0, 1fr)' },
-  layoutMobile: { gridTemplateColumns: '1fr' },
-  lista: { background: '#fff', padding: '14px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,.08)', height: 'fit-content' },
-  listaDesktop: { position: 'sticky', top: '20px' },
-  listaTitulo: { margin: '0 0 12px 0', fontSize: '16px', color: '#2c3e50' },
-  busquedaWrap: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' },
-  busquedaInput: { width: 'min(380px, 100%)', border: '1px solid #cfd8dc', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', boxSizing: 'border-box' },
-  busquedaMeta: { margin: 0, fontSize: '12px', color: '#6b7280' },
-  busquedaBtn: { padding: '0.35rem 0.75rem', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', width: 'auto', whiteSpace: 'nowrap' },
-  listaVacia: { textAlign: 'center', padding: '24px 10px', color: '#95a5a6' },
-  listaScroll: { display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' },
-  listaScrollDesktop: { maxHeight: 'calc(100vh - 260px)' },
-  listaScrollMobile: { maxHeight: '50vh' },
-  item: { padding: '12px', border: '2px solid #ecf0f1', borderRadius: '8px', cursor: 'pointer', background: '#f9fafb' },
-  itemActivo: { borderColor: '#2980b9', background: '#e3f2fd', boxShadow: '0 0 0 3px rgba(52,152,219,.1)' },
-  row: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' },
-  radicado: { fontWeight: 'bold', color: '#2c3e50', fontFamily: 'monospace', fontSize: '12px' },
-  badge: { fontSize: '11px', padding: '4px 8px', borderRadius: '4px', fontWeight: 600, textTransform: 'uppercase' },
-  itemP: { margin: '3px 0', fontSize: '13px', color: '#2c3e50' },
-  detalle: { background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,.08)', overflow: 'hidden' },
-  detalleHeader: { background: 'linear-gradient(135deg,#667eea 0%,#764ba2 100%)', color: '#fff', padding: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  detalleHeaderH3: { margin: 0, fontSize: '18px' },
-  cerrar: { background: 'rgba(255,255,255,.2)', border: 'none', color: '#fff', width: '36px', height: '36px', borderRadius: '50%', cursor: 'pointer', fontSize: '20px' },
-  detalleBody: { padding: 'clamp(0.9rem, 3.5vw, 1.2rem)', maxHeight: 'calc(100vh - 230px)', overflowY: 'auto' },
-  seccion: { marginBottom: '18px', paddingBottom: '16px', borderBottom: '1px solid #ecf0f1' },
-  h4: { margin: '0 0 12px 0', fontSize: '15px', color: '#2c3e50' },
-  grid2: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: '12px' },
-  cardInfo: { background: '#f9fafb', padding: '10px', borderRadius: '6px', borderLeft: '3px solid #3498db' },
-  label: { display: 'block', fontSize: '12px', color: '#7f8c8d', textTransform: 'uppercase', fontWeight: 600, marginBottom: '6px' },
-  value: { margin: 0, fontSize: '14px', color: '#2c3e50', fontWeight: 500 },
-  input: { width: '100%', border: '1px solid #cfd8dc', borderRadius: '6px', padding: '8px 10px', fontSize: '14px', boxSizing: 'border-box' },
-  docs: { display: 'flex', flexDirection: 'column', gap: '10px' },
-  docItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', padding: '10px', background: '#f9fafb', borderRadius: '6px', borderLeft: '3px solid #f39c12' },
-  docBtns: { display: 'flex', gap: '8px' },
-  btnVer: { background: '#3498db', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 },
-  btnDesc: { background: '#27ae60', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 },
-  textarea: { width: '100%', minHeight: '110px', padding: '12px', border: '1px solid #bdc3c7', borderRadius: '6px', fontSize: '13px', boxSizing: 'border-box', resize: 'vertical' },
-  acciones: { display: 'flex', gap: '10px', paddingTop: '14px', flexWrap: 'wrap' },
-  btnAprobar: { background: '#27ae60', color: '#fff', border: 'none', borderRadius: '6px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer', width: 'auto', minWidth: '190px' },
-  btnRechazar: { background: '#e74c3c', color: '#fff', border: 'none', borderRadius: '6px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer', width: 'auto', minWidth: '190px' },
-  btnNotificar: { background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer', width: 'auto', minWidth: '260px' },
-  disabled: { background: '#bdc3c7', cursor: 'not-allowed', opacity: 0.7 },
-  nota: { background: '#e3f2fd', borderLeft: '4px solid #2196F3', padding: '12px', borderRadius: '4px', marginTop: '16px', color: '#1565c0', fontSize: '13px' },
-  warning: { background: '#fff4e5', borderLeft: '4px solid #f59e0b', padding: '12px', borderRadius: '4px', marginBottom: '10px', color: '#92400e', fontSize: '13px' },
-  certificadosSeccion: { background: '#fff', padding: '14px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,.08)', marginBottom: '14px' },
-  filtrosCert: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', marginBottom: '10px' },
-  inputFiltro: { width: '100%', border: '1px solid #cfd8dc', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', boxSizing: 'border-box' },
-  listaCertificados: { display: 'grid', gap: '8px', maxHeight: '220px', overflowY: 'auto' },
-  certItem: { border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 10px', background: '#f9fafb' },
-  certMeta: { margin: '2px 0', fontSize: '12px', color: '#4b5563' },
-  seccionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.8rem', marginBottom: '10px', flexWrap: 'wrap' },
-  btnToggleSeccion: { padding: '0.35rem 0.75rem', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', width: 'auto', whiteSpace: 'nowrap' },
-  avisoOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(17, 24, 39, 0.35)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '16px',
-    zIndex: 120,
-  },
-  panelAviso: { width: 'min(92vw, 520px)', padding: '14px 16px', borderRadius: '10px', border: '1px solid transparent', boxShadow: '0 10px 30px rgba(0,0,0,0.22)' },
-  panelAvisoTexto: { margin: 0, fontSize: '14px', fontWeight: 600, lineHeight: 1.45 },
-  panelAvisoAcciones: { marginTop: '12px', display: 'flex', justifyContent: 'flex-end' },
-  panelAvisoCerrar: { border: 'none', background: '#1f2937', color: '#fff', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, lineHeight: 1, padding: '8px 10px' },
-  panelAvisoError: { background: '#ffebee', borderColor: '#ef5350', color: '#b71c1c' },
-  panelAvisoExito: { background: '#e8f5e9', borderColor: '#81c784', color: '#1b5e20' },
-  panelAvisoInfo: { background: '#e3f2fd', borderColor: '#64b5f6', color: '#0d47a1' },
-  panelAvisoWarning: { background: '#fff4e5', borderColor: '#f59e0b', color: '#92400e' },
-};
+const styles = getPanelVerificadorStyles();
 
 const estadoBadge = (estado) => {
   const key = (estado || '').toLowerCase();
@@ -106,21 +29,7 @@ const cumpleFiltro = (solicitud, filtro) => {
   return solicitud.estado === 'RECHAZADO';
 };
 
-const formatearFechaHora = (valor) => {
-  if (!valor) return 'Sin fecha';
-  const fecha = new Date(valor);
-  if (Number.isNaN(fecha.getTime())) return 'Sin fecha';
-  const esSoloFecha = typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor);
-  return esSoloFecha
-    ? fecha.toLocaleDateString('es-CO')
-    : fecha.toLocaleString('es-CO', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-};
+const formatearFechaHora = (valor) => formatearFechaHoraUtil(valor, { fallback: 'Sin fecha' });
 
 const normalizarFecha = (valor) => {
   if (!valor) return null;
@@ -192,13 +101,6 @@ export default function PanelVerificador() {
     setAvisoPanel({ tipo, mensaje });
   };
 
-  const obtenerEstiloAvisoPanel = (tipo) => {
-    if (tipo === 'success') return styles.panelAvisoExito;
-    if (tipo === 'warning') return styles.panelAvisoWarning;
-    if (tipo === 'info') return styles.panelAvisoInfo;
-    return styles.panelAvisoError;
-  };
-
   useEffect(() => {
     cargarSolicitudes();
   }, []);
@@ -215,7 +117,7 @@ export default function PanelVerificador() {
       return;
     }
     setDocumentStatus(null);
-  }, [selectedSolicitud]);
+  }, [selectedSolicitud, cargarEstadoDocumentos]);
 
   const filtroActual = useMemo(() => FILTROS.find((f) => f.key === filtroVista) || FILTROS[0], [filtroVista]);
   const solicitudesFiltradas = useMemo(() => solicitudes.filter((s) => cumpleFiltro(s, filtroVista)), [solicitudes, filtroVista]);
@@ -234,17 +136,11 @@ export default function PanelVerificador() {
       return campos.some((valor) => (valor || '').toString().toLowerCase().includes(textoBusquedaSolicitudes));
     });
   }, [solicitudesFiltradas, textoBusquedaSolicitudes]);
-  const certificadosGeneradosFiltrados = useMemo(() => {
-    const base = solicitudes.filter((s) => s.estado === 'FINALIZADO' || s.estado === 'RECHAZADO');
-    return base.filter((s) => {
-      const matchRadicado = (s.numeroRadicado || '').toLowerCase().includes(filtroCertRadicado.toLowerCase().trim());
-      const matchNombre = (s.nombreSolicitante || '').toLowerCase().includes(filtroCertNombre.toLowerCase().trim());
-      const matchTipo = filtroCertTipo === 'todos'
-        || (filtroCertTipo === 'positiva' && s.estado === 'FINALIZADO')
-        || (filtroCertTipo === 'negativa' && s.estado === 'RECHAZADO');
-      return matchRadicado && matchNombre && matchTipo;
-    });
-  }, [solicitudes, filtroCertRadicado, filtroCertNombre, filtroCertTipo]);
+  const certificadosGeneradosFiltrados = useMemo(() => filtrarCertificadosGenerados(solicitudes, {
+    radicado: filtroCertRadicado,
+    nombre: filtroCertNombre,
+    tipo: filtroCertTipo,
+  }), [solicitudes, filtroCertRadicado, filtroCertNombre, filtroCertTipo]);
   const esPendienteSeleccionada = selectedSolicitud ? (selectedSolicitud.estado === 'EN_VALIDACION' || selectedSolicitud.estado === 'RADICADO') : false;
   const textoDiasHabilesSeleccionada = useMemo(() => {
     if (!selectedSolicitud || !esPendienteSeleccionada) return null;
@@ -311,7 +207,11 @@ export default function PanelVerificador() {
     }
   };
 
-  const cargarEstadoDocumentos = async (tramiteId) => {
+  const obtenerHeadersAuditoriaUsuario = useCallback(() => {
+    return buildUsernameHeader('X-Username');
+  }, []);
+
+  const cargarEstadoDocumentos = useCallback(async (tramiteId) => {
     setLoadingDocumentos(true);
     try {
       const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/verificar-documentos`, {
@@ -325,7 +225,7 @@ export default function PanelVerificador() {
     } finally {
       setLoadingDocumentos(false);
     }
-  };
+  }, [obtenerHeadersAuditoriaUsuario]);
 
   const obtenerMensajeErrorRespuesta = async (response, mensajePorDefecto) => {
     try {
@@ -342,18 +242,6 @@ export default function PanelVerificador() {
       // no-op
     }
     return mensajePorDefecto;
-  };
-
-  const obtenerHeadersAuditoriaUsuario = () => {
-    try {
-      const userGuardado = localStorage.getItem('user');
-      if (!userGuardado) return {};
-      const user = JSON.parse(userGuardado);
-      if (!user?.username) return {};
-      return { 'X-Username': user.username };
-    } catch {
-      return {};
-    }
   };
 
   const abrirDocumento = async (tramiteId, tipo) => {
@@ -421,8 +309,7 @@ export default function PanelVerificador() {
 
     setProcesando(true);
     try {
-      const userGuardado = localStorage.getItem('user');
-      const user = userGuardado ? JSON.parse(userGuardado) : null;
+      const user = getStoredUser();
 
       const response = await fetch(`${API_TRAMITES_URL}/${selectedSolicitud.id}/verificacion`, {
         method: 'POST',
@@ -468,8 +355,7 @@ export default function PanelVerificador() {
 
     setProcesando(true);
     try {
-      const userGuardado = localStorage.getItem('user');
-      const user = userGuardado ? JSON.parse(userGuardado) : null;
+      const user = getStoredUser();
 
       const response = await fetch(`${API_TRAMITES_URL}/${selectedSolicitud.id}/verificacion`, {
         method: 'POST',
@@ -507,8 +393,7 @@ export default function PanelVerificador() {
 
     setEnviandoNotificacionAdmin(true);
     try {
-      const userGuardado = localStorage.getItem('user');
-      const user = userGuardado ? JSON.parse(userGuardado) : null;
+      const user = getStoredUser();
 
       const mensajeBase = documentosFaltantes.length > 0
         ? `Se detectan documentos faltantes: ${documentosFaltantes.join(', ')}`
@@ -564,16 +449,7 @@ export default function PanelVerificador() {
       </div>
 
       {error ? <div style={styles.error}>⚠️ {error}</div> : null}
-      {avisoPanel ? (
-        <div style={styles.avisoOverlay} onClick={() => setAvisoPanel(null)}>
-          <div style={{ ...styles.panelAviso, ...obtenerEstiloAvisoPanel(avisoPanel.tipo) }} onClick={(e) => e.stopPropagation()}>
-            <p style={styles.panelAvisoTexto}>{avisoPanel.mensaje}</p>
-            <div style={styles.panelAvisoAcciones}>
-              <button style={styles.panelAvisoCerrar} onClick={() => setAvisoPanel(null)} aria-label="Cerrar aviso">Entendido</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <AvisoModal aviso={avisoPanel} onClose={() => setAvisoPanel(null)} />
 
       <div style={styles.certificadosSeccion}>
         <div style={styles.seccionHeader}>
@@ -721,7 +597,7 @@ export default function PanelVerificador() {
                   <div style={styles.cardInfo}><span style={styles.label}>Tipo Certificado</span><p style={styles.value}>{selectedSolicitud.tipo_certificado || 'No especificado'}</p></div>
                   <div style={styles.cardInfo}><span style={styles.label}>Fecha Radicación</span><p style={styles.value}>{formatearFechaHora(selectedSolicitud.fechaRadicacion)}</p></div>
                   {textoDiasHabilesSeleccionada ? <div style={styles.cardInfo}><span style={styles.label}>Tiempo restante</span><p style={styles.value}>{textoDiasHabilesSeleccionada}</p></div> : null}
-                  <div style={styles.cardInfo}><span style={styles.label}>Consecutivo Verificador</span><input style={styles.input} value={consecutivo} onChange={(e) => setConsecutivo(e.target.value.toUpperCase())} readOnly={!esPendienteSeleccionada} /></div>
+                  <div style={styles.cardInfo}><span style={styles.label}>Consecutivo Documental</span><input style={styles.input} value={consecutivo} onChange={(e) => setConsecutivo(e.target.value.toUpperCase())} readOnly={!esPendienteSeleccionada} /></div>
                 </div>
               </div>
 

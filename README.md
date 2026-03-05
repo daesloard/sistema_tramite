@@ -49,6 +49,26 @@ npm run dev
 ```
 Frontend en `http://localhost:5173`
 
+## Publicar frontend dentro del backend (SPA)
+
+Para empaquetar el frontend React dentro de Spring Boot y habilitar rutas SPA en el mismo servicio:
+
+```powershell
+cd frontend
+npm run build:backend
+```
+
+Esto hace dos pasos:
+- Compila Vite (`frontend/dist`)
+- Copia el resultado a `backend/src/main/resources/static`
+
+Luego puedes iniciar backend normalmente:
+
+```powershell
+cd ../backend
+mvn spring-boot:run
+```
+
 ## Endpoints API
 Base URL: `http://localhost:8080/api/tramites`
 

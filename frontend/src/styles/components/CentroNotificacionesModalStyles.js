@@ -1,0 +1,38 @@
+import { theme } from '../theme';
+
+export const getCentroNotificacionesModalStyles = () => ({
+  notiOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: theme.overlay.modal,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '16px',
+    zIndex: 130,
+  },
+  notiModal: {
+    width: 'min(95vw, 640px)',
+    maxHeight: '80vh',
+    overflow: 'hidden',
+    background: theme.colors.white,
+    borderRadius: theme.radius.xl,
+    boxShadow: '0 15px 40px rgba(0,0,0,0.25)',
+    border: `1px solid ${theme.colors.borderNeutral}`,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  notiHeader: { padding: '12px 14px', borderBottom: `1px solid ${theme.colors.borderNeutral}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' },
+  notiTitle: { margin: 0, fontSize: '15px', color: theme.colors.textDark },
+  notiActions: { display: 'flex', gap: '8px', alignItems: 'center' },
+  notiBtnSmall: { border: 'none', background: '#2563eb', color: theme.colors.white, borderRadius: theme.radius.md, padding: '6px 10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
+  notiBtnClose: { border: 'none', background: '#1f2937', color: theme.colors.white, borderRadius: theme.radius.md, padding: '6px 10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
+  notiBody: { padding: '10px', overflowY: 'auto', display: 'grid', gap: '8px' },
+  notiItem: { border: `1px solid ${theme.colors.borderNeutral}`, borderRadius: theme.radius.lg, padding: '10px', background: theme.colors.panelBg },
+  notiItemNoLeida: { borderColor: '#93c5fd', background: '#eff6ff' },
+  notiItemTitulo: { margin: '0 0 4px 0', fontSize: '13px', fontWeight: 700, color: theme.colors.textDark },
+  notiItemMensaje: { margin: '0 0 6px 0', fontSize: '12px', color: theme.colors.textTertiary },
+  notiItemMeta: { margin: 0, fontSize: '11px', color: theme.colors.textMuted },
+  notiItemBtns: { marginTop: '8px', display: 'flex', justifyContent: 'flex-end' },
+  notiEmpty: { margin: 0, padding: '16px', textAlign: 'center', color: theme.colors.textMuted, fontSize: '13px' },
+});

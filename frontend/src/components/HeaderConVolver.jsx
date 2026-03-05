@@ -1,42 +1,7 @@
 import { useEffect, useState } from 'react';
 
-const styles = {
-  headerComun: {
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    color: '#fff',
-    padding: 'clamp(0.9rem, 3.5vw, 1.5rem) clamp(0.9rem, 4vw, 2rem)',
-    display: 'grid',
-    gridTemplateColumns: 'auto 1fr auto',
-    alignItems: 'center',
-    gap: '0.9rem',
-    position: 'sticky',
-    top: 0,
-    zIndex: 50,
-  },
-  headerCentro: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.7rem', minWidth: 0 },
-  headerTitleCommon: { margin: 0, fontSize: 'clamp(1rem, 4.5vw, 1.5rem)', textAlign: 'center' },
-  headerDerecha: { justifySelf: 'end' },
-  headerEscudoPanel: {
-    width: 'clamp(110px, 24vw, 250px)',
-    height: 'auto',
-    filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.25))',
-  },
-  btnVolver: {
-    padding: '0.45rem 0.9rem',
-    background: 'rgba(255,255,255,0.2)',
-    color: '#fff',
-    border: '2px solid #fff',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontWeight: 600,
-    fontSize: '0.82rem',
-    width: 'auto',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    whiteSpace: 'nowrap',
-  },
-};
+import { getHeaderConVolverStyles } from '../styles/components/HeaderConVolverStyles';
+const styles = getHeaderConVolverStyles();
 
 export default function HeaderConVolver({ onVolver, titulo, derecha }) {
   const [esMovil, setEsMovil] = useState(() => {

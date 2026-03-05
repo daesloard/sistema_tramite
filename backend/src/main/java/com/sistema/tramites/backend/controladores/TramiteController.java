@@ -17,8 +17,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Year;
@@ -414,7 +412,7 @@ public class TramiteController {
                     tramite.setCodigoVerificacion(generarCodigoVerificacion(tramite.getNumeroRadicado()));
                 }
                 documentoGeneradoService.generarYAdjuntarPdf(tramite, false, verificacion.getObservaciones());
-                tramite.setHashDocumentoGenerado(calcularHashSha256(tramite.getContenidoPdfGenerado()));
+                tramite.setHashDocumentoGenerado(HashUtils.sha256Hex(tramite.getContenidoPdfGenerado()));
                 subirCertificadoGeneradoADrive(tramite);
                 emailService.enviarDocumentoFinal(
                         tramite.getCorreoElectronico(),
@@ -637,17 +635,25 @@ public class TramiteController {
                 }
             
             Tramite tramite = optTramite.get();
-            EstadoTramite estadoAnterior = tramite.getEstado();
 
                 if (tramite.getEstado() != EstadoTramite.EN_FIRMA) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("El trámite no está en estado EN_FIRMA");
                 }
 
-            tramite.setEstado(EstadoTramite.FINALIZADO);
+            if (tramite.getFirmaAlcalde() != null && !tramite.getFirmaAlcalde().isBlank()) {
+                var respuesta = new java.util.HashMap<String, Object>();
+                respuesta.put("tramiteId", tramite.getId());
+                respuesta.put("numeroRadicado", tramite.getNumeroRadicado());
+                respuesta.put("estado", tramite.getEstado() != null ? tramite.getEstado().name() : null);
+                respuesta.put("fechaFirmaAlcalde", tramite.getFechaFirmaAlcalde());
+                respuesta.put("mensaje", "La firma ya fue registrada y el certificado está terminando de procesarse.");
+                return ResponseEntity.status(HttpStatus.ACCEPTED).body(respuesta);
+            }
+
             tramite.setFirmaAlcalde("FIRMADO_POR_" + usernameFirma.toUpperCase());
             tramite.setFechaFirmaAlcalde(LocalDateTime.now());
-                tramite.setUsuarioAlcalde(usuarioAlcalde);
+            tramite.setUsuarioAlcalde(usuarioAlcalde);
             if (tramite.getCodigoVerificacion() == null || tramite.getCodigoVerificacion().isBlank()) {
                 tramite.setCodigoVerificacion(generarCodigoVerificacion(tramite.getNumeroRadicado()));
             }
@@ -660,15 +666,6 @@ public class TramiteController {
             long inicioPostFirma = System.nanoTime();
             certificadoPostFirmaAsyncService.procesarPostFirma(actualizado.getId());
             long duracionProgramacionPostFirma = millisDesde(inicioPostFirma);
-
-                auditoriaTramiteService.registrarEvento(
-                    actualizado.getId(),
-                    usuarioAlcalde.getId(),
-                    "FIRMA_ALCALDE",
-                    "Documento firmado por " + usuarioAlcalde.getUsername() + " para radicado " + actualizado.getNumeroRadicado(),
-                    estadoAnterior,
-                    actualizado.getEstado()
-                );
 
             long inicioNotificacionInterna = System.nanoTime();
             firmaAlcaldeAsyncService.notificarFirmaInterna(
@@ -691,7 +688,7 @@ public class TramiteController {
             respuesta.put("numeroRadicado", actualizado.getNumeroRadicado());
             respuesta.put("estado", actualizado.getEstado() != null ? actualizado.getEstado().name() : null);
             respuesta.put("fechaFirmaAlcalde", actualizado.getFechaFirmaAlcalde());
-            respuesta.put("mensaje", "Firma registrada. El certificado se está procesando y enviando.");
+            respuesta.put("mensaje", "Firma registrada. El estado cambiará a FINALIZADO cuando termine el procesamiento del certificado.");
 
             return ResponseEntity.ok(respuesta);
             
@@ -734,7 +731,7 @@ public class TramiteController {
                     .body("El dato de validación no coincide con el titular de la solicitud");
                 }
 
-            String hashActual = calcularHashSha256(t.getContenidoPdfGenerado());
+            String hashActual = HashUtils.sha256Hex(t.getContenidoPdfGenerado());
             boolean documentoIntegro = t.getContenidoPdfGenerado() != null
                     && t.getContenidoPdfGenerado().length > 0
                     && t.getHashDocumentoGenerado() != null
@@ -1300,24 +1297,6 @@ public class TramiteController {
             return porDefecto;
         }
         return base.toUpperCase(Locale.ROOT);
-    }
-
-    private String calcularHashSha256(byte[] contenido) {
-        if (contenido == null || contenido.length == 0) {
-            return null;
-        }
-
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(contenido);
-            StringBuilder builder = new StringBuilder();
-            for (byte b : hash) {
-                builder.append(String.format("%02x", b));
-            }
-            return builder.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("No se pudo calcular hash SHA-256", e);
-        }
     }
 
     private String generarRadicado() {
