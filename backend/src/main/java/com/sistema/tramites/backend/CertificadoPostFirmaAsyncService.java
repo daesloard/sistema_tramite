@@ -5,8 +5,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 
 @Service
 public class CertificadoPostFirmaAsyncService {
@@ -17,15 +15,18 @@ public class CertificadoPostFirmaAsyncService {
     private final DocumentoGeneradoService documentoGeneradoService;
     private final CertificadoDriveAsyncService certificadoDriveAsyncService;
     private final EmailService emailService;
+    private final AuditoriaTramiteService auditoriaTramiteService;
 
     public CertificadoPostFirmaAsyncService(TramiteRepository tramiteRepository,
                                             DocumentoGeneradoService documentoGeneradoService,
                                             CertificadoDriveAsyncService certificadoDriveAsyncService,
-                                            EmailService emailService) {
+                                            EmailService emailService,
+                                            AuditoriaTramiteService auditoriaTramiteService) {
         this.tramiteRepository = tramiteRepository;
         this.documentoGeneradoService = documentoGeneradoService;
         this.certificadoDriveAsyncService = certificadoDriveAsyncService;
         this.emailService = emailService;
+        this.auditoriaTramiteService = auditoriaTramiteService;
     }
 
     @Async("pdfTaskExecutor")
@@ -42,9 +43,20 @@ public class CertificadoPostFirmaAsyncService {
                 return;
             }
 
-            if (tramite.getEstado() != EstadoTramite.FINALIZADO) {
-                log.warn("Se omitió post-firma para trámite {} porque no está FINALIZADO (estado={})",
-                        tramiteId, tramite.getEstado());
+            EstadoTramite estadoAnterior = tramite.getEstado();
+            if (estadoAnterior == EstadoTramite.FINALIZADO) {
+                log.info("Post-firma omitida para trámite {} porque ya está FINALIZADO", tramiteId);
+                return;
+            }
+
+            if (estadoAnterior != EstadoTramite.EN_FIRMA) {
+                log.warn("Se omitió post-firma para trámite {} porque no está EN_FIRMA (estado={})",
+                        tramiteId, estadoAnterior);
+                return;
+            }
+
+            if (tramite.getFirmaAlcalde() == null || tramite.getFirmaAlcalde().isBlank()) {
+                log.warn("Se omitió post-firma para trámite {} porque la firma del alcalde no está registrada", tramiteId);
                 return;
             }
 
@@ -62,18 +74,32 @@ public class CertificadoPostFirmaAsyncService {
             }
 
             if (tramite.getHashDocumentoGenerado() == null || tramite.getHashDocumentoGenerado().isBlank()) {
-                tramite.setHashDocumentoGenerado(calcularHashSha256(contenidoPdf));
+                tramite.setHashDocumentoGenerado(HashUtils.sha256Hex(contenidoPdf));
                 actualizado = true;
             }
+
+            tramite.setEstado(EstadoTramite.FINALIZADO);
+            actualizado = true;
 
             if (actualizado) {
                 tramite = tramiteRepository.save(tramite);
                 contenidoPdf = tramite.getContenidoPdfGenerado();
             }
 
+            Long usuarioAlcaldeId = (tramite.getUsuarioAlcalde() != null) ? tramite.getUsuarioAlcalde().getId() : null;
+            auditoriaTramiteService.registrarEvento(
+                tramite.getId(),
+                usuarioAlcaldeId,
+                "FIRMA_ALCALDE",
+                "Documento firmado por alcalde y finalizado para radicado " + tramite.getNumeroRadicado(),
+                estadoAnterior,
+                tramite.getEstado()
+            );
+
             certificadoDriveAsyncService.subirCertificadoFirmado(tramite.getId());
 
-            emailService.enviarDocumentoFinal(
+            try {
+                emailService.enviarDocumentoFinal(
                     tramite.getCorreoElectronico(),
                     tramite.getNombreSolicitante(),
                     tramite.getNumeroRadicado(),
@@ -81,7 +107,10 @@ public class CertificadoPostFirmaAsyncService {
                     "",
                     contenidoPdf,
                     tramite.getNombrePdfGenerado()
-            );
+                );
+            } catch (Exception correoEx) {
+                log.warn("El trámite {} se finalizó, pero falló el envío de correo: {}", tramiteId, correoEx.getMessage());
+            }
 
             long duracionMs = (System.nanoTime() - inicio) / 1_000_000;
             log.info("Post-firma asíncrona completada. Trámite={} duracion={}ms", tramiteId, duracionMs);
@@ -91,21 +120,4 @@ public class CertificadoPostFirmaAsyncService {
         }
     }
 
-    private String calcularHashSha256(byte[] contenido) {
-        if (contenido == null || contenido.length == 0) {
-            return null;
-        }
-
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(contenido);
-            StringBuilder builder = new StringBuilder();
-            for (byte b : hash) {
-                builder.append(String.format("%02x", b));
-            }
-            return builder.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("No se pudo calcular hash SHA-256", e);
-        }
-    }
 }
