@@ -6,6 +6,8 @@ import jakarta.validation.Valid;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -37,6 +39,7 @@ import java.util.stream.Collectors;
 public class TramiteController {
 
     private static final String DRIVE_PREFIX = "drive:";
+    private static final Logger log = LoggerFactory.getLogger(TramiteController.class);
 
     private final TramiteRepository tramiteRepository;
     private final WorkingDayCalculator workingDayCalculator;
@@ -46,6 +49,7 @@ public class TramiteController {
     private final DriveStorageService driveStorageService;
     private final AuditoriaTramiteService auditoriaTramiteService;
     private final NotificacionUsuarioService notificacionUsuarioService;
+    private final CertificadoDriveAsyncService certificadoDriveAsyncService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public TramiteController(TramiteRepository tramiteRepository, 
@@ -55,7 +59,8 @@ public class TramiteController {
                            UsuarioRepository usuarioRepository,
                            DriveStorageService driveStorageService,
                            AuditoriaTramiteService auditoriaTramiteService,
-                           NotificacionUsuarioService notificacionUsuarioService) {
+                           NotificacionUsuarioService notificacionUsuarioService,
+                           CertificadoDriveAsyncService certificadoDriveAsyncService) {
         this.tramiteRepository = tramiteRepository;
         this.workingDayCalculator = workingDayCalculator;
         this.emailService = emailService;
@@ -64,6 +69,7 @@ public class TramiteController {
         this.driveStorageService = driveStorageService;
         this.auditoriaTramiteService = auditoriaTramiteService;
         this.notificacionUsuarioService = notificacionUsuarioService;
+        this.certificadoDriveAsyncService = certificadoDriveAsyncService;
     }
 
     @GetMapping
@@ -569,6 +575,7 @@ public class TramiteController {
     public ResponseEntity<?> firmarDocumento(@PathVariable Long id,
                                             @Valid @RequestBody FirmaAlcaldeDTO firma) {
         try {
+            long inicioTotal = System.nanoTime();
             Optional<Tramite> optTramite = tramiteRepository.findById(id);
             if (optTramite.isEmpty()) {
                 return ResponseEntity.notFound().build();
@@ -622,6 +629,7 @@ public class TramiteController {
                     .body("El trámite no está en estado EN_FIRMA");
                 }
 
+            long inicioGeneracion = System.nanoTime();
             tramite.setEstado(EstadoTramite.FINALIZADO);
             tramite.setFirmaAlcalde("FIRMADO_POR_" + usernameFirma.toUpperCase());
             tramite.setFechaFirmaAlcalde(LocalDateTime.now());
@@ -630,10 +638,22 @@ public class TramiteController {
                 tramite.setCodigoVerificacion(generarCodigoVerificacion(tramite.getNumeroRadicado()));
             }
             documentoGeneradoService.generarYAdjuntarPdf(tramite, true, "");
+            long duracionGeneracion = millisDesde(inicioGeneracion);
+
+            long inicioHash = System.nanoTime();
             tramite.setHashDocumentoGenerado(calcularHashSha256(tramite.getContenidoPdfGenerado()));
-            subirCertificadoGeneradoADrive(tramite);
+            long duracionHash = millisDesde(inicioHash);
+
+            long inicioPersistencia = System.nanoTime();
             
             Tramite actualizado = tramiteRepository.save(tramite);
+            long duracionPersistencia = millisDesde(inicioPersistencia);
+
+            long inicioDrive = System.nanoTime();
+            if (driveStorageService.isEnabled()) {
+                certificadoDriveAsyncService.subirCertificadoFirmado(actualizado.getId());
+            }
+            long duracionProgramacionDrive = millisDesde(inicioDrive);
 
                 auditoriaTramiteService.registrarEvento(
                     actualizado.getId(),
@@ -661,6 +681,7 @@ public class TramiteController {
                 );
             
             // Enviar documento final al usuario
+            long inicioCorreo = System.nanoTime();
             emailService.enviarDocumentoFinal(
                     tramite.getCorreoElectronico(),
                     tramite.getNombreSolicitante(),
@@ -670,6 +691,17 @@ public class TramiteController {
                     tramite.getContenidoPdfGenerado(),
                     tramite.getNombrePdfGenerado()
             );
+            long duracionCorreo = millisDesde(inicioCorreo);
+
+            long duracionTotal = millisDesde(inicioTotal);
+            log.info("firma-alcalde tiempos tramite={} pdf={}ms hash={}ms save={}ms driveAsyncSchedule={}ms emailAsyncDispatch={}ms total={}ms",
+                    actualizado.getId(),
+                    duracionGeneracion,
+                    duracionHash,
+                    duracionPersistencia,
+                    duracionProgramacionDrive,
+                    duracionCorreo,
+                    duracionTotal);
             
             return ResponseEntity.ok(actualizado);
             
@@ -1237,6 +1269,10 @@ public class TramiteController {
             return "CERTIFICADO_GENERADO_DESCARGADO";
         }
         return "CERTIFICADO_GENERADO_ACCESO";
+    }
+
+    private long millisDesde(long inicioNano) {
+        return (System.nanoTime() - inicioNano) / 1_000_000;
     }
 
     private void subirCertificadoGeneradoADrive(Tramite tramite) throws IOException {
