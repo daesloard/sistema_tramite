@@ -11,6 +11,10 @@ import com.lowagie.text.pdf.PdfWriter;
 import org.docx4j.convert.out.pdf.PdfConversion;
 import org.docx4j.convert.out.pdf.viaXSLFO.Conversion;
 import org.docx4j.convert.out.pdf.viaXSLFO.PdfSettings;
+import org.docx4j.fonts.IdentityPlusMapper;
+import org.docx4j.fonts.Mapper;
+import org.docx4j.fonts.PhysicalFont;
+import org.docx4j.fonts.PhysicalFonts;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
@@ -47,6 +51,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -69,6 +74,7 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -84,6 +90,8 @@ public class DocumentoGeneradoService {
     private static final String MARCADOR_FIRMA_GUILLEMET = "«firma.jpeg»";
     private static final int FIRMA_ANCHO_PX = 220;
     private static final int FIRMA_ALTO_PX = 80;
+    private static final String FUENTE_MAVEN_PRO = "Maven Pro";
+    private static final String RECURSO_MAVEN_PRO_TTF = "classpath:fonts/MavenPro[wght].ttf";
 
     private final ResourceLoader resourceLoader;
     private final boolean usarLibreOffice;
@@ -92,6 +100,7 @@ public class DocumentoGeneradoService {
     private final String certificadoP12Password;
     private final String certificadoP12Alias;
     private volatile CertBundle certBundleCache;
+    private volatile PhysicalFont fuenteMavenProCache;
 
     static {
         if (Security.getProvider("BC") == null) {
@@ -647,7 +656,7 @@ public class DocumentoGeneradoService {
         }
         for (XWPFRun run : paragraph.getRuns()) {
             if (run != null) {
-                run.setFontFamily("Maven Pro");
+                run.setFontFamily(FUENTE_MAVEN_PRO);
             }
         }
     }
@@ -1130,14 +1139,81 @@ public class DocumentoGeneradoService {
                     new ByteArrayInputStream(docxContenido)
             );
 
+            Mapper fontMapper = new IdentityPlusMapper();
+            PhysicalFont fuenteMavenPro = registrarFuenteMavenProSiDisponible();
+            if (fuenteMavenPro != null) {
+                fontMapper.put(FUENTE_MAVEN_PRO, fuenteMavenPro);
+                fontMapper.put("MavenPro", fuenteMavenPro);
+            }
+            wordMLPackage.setFontMapper(fontMapper);
+
             PdfSettings pdfSettings = new PdfSettings();
             PdfConversion conversion = new Conversion(wordMLPackage);
 
             ByteArrayOutputStream pdfOutput = new ByteArrayOutputStream();
             conversion.output(pdfOutput, pdfSettings);
             return pdfOutput.toByteArray();
-        } catch (Docx4JException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("No fue posible convertir la plantilla DOCX a PDF con docx4j", e);
+        }
+    }
+
+    private PhysicalFont registrarFuenteMavenProSiDisponible() {
+        PhysicalFont cache = fuenteMavenProCache;
+        if (cache != null) {
+            return cache;
+        }
+
+        synchronized (this) {
+            if (fuenteMavenProCache != null) {
+                return fuenteMavenProCache;
+            }
+
+            PhysicalFont existente = PhysicalFonts.get(FUENTE_MAVEN_PRO);
+            if (existente != null) {
+                fuenteMavenProCache = existente;
+                return fuenteMavenProCache;
+            }
+
+            Resource fuente = resourceLoader.getResource(RECURSO_MAVEN_PRO_TTF);
+            if (!fuente.exists()) {
+                logger.warn("No se encontró {}. El PDF usará la fuente disponible del sistema.", RECURSO_MAVEN_PRO_TTF);
+                return null;
+            }
+
+            Path temporal = null;
+            try (InputStream input = fuente.getInputStream()) {
+                temporal = Files.createTempFile("maven-pro-", ".ttf");
+                Files.copy(input, temporal, StandardCopyOption.REPLACE_EXISTING);
+                temporal.toFile().deleteOnExit();
+
+                PhysicalFonts.addPhysicalFont(temporal.toUri());
+                fuenteMavenProCache = PhysicalFonts.get(FUENTE_MAVEN_PRO);
+                if (fuenteMavenProCache == null) {
+                    for (Map.Entry<String, PhysicalFont> entry : PhysicalFonts.getPhysicalFonts().entrySet()) {
+                        String nombreFuente = entry.getKey();
+                        if (nombreFuente != null && nombreFuente.toLowerCase(LOCALE_ES).contains("maven")) {
+                            fuenteMavenProCache = entry.getValue();
+                            break;
+                        }
+                    }
+                }
+                if (fuenteMavenProCache == null) {
+                    logger.warn("Se cargó {} pero docx4j no registró '{}' por nombre.", RECURSO_MAVEN_PRO_TTF, FUENTE_MAVEN_PRO);
+                } else {
+                    logger.info("Fuente '{}' registrada para conversión PDF desde {}", FUENTE_MAVEN_PRO, RECURSO_MAVEN_PRO_TTF);
+                }
+                return fuenteMavenProCache;
+            } catch (Exception ex) {
+                logger.warn("No fue posible registrar fuente Maven Pro para PDF: {}", ex.getMessage());
+                if (temporal != null) {
+                    try {
+                        Files.deleteIfExists(temporal);
+                    } catch (IOException ignored) {
+                    }
+                }
+                return null;
+            }
         }
     }
 
