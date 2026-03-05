@@ -111,14 +111,6 @@ export default function PanelVerificador() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  useEffect(() => {
-    if (selectedSolicitud?.id) {
-      cargarEstadoDocumentos(selectedSolicitud.id);
-      return;
-    }
-    setDocumentStatus(null);
-  }, [selectedSolicitud, cargarEstadoDocumentos]);
-
   const filtroActual = useMemo(() => FILTROS.find((f) => f.key === filtroVista) || FILTROS[0], [filtroVista]);
   const solicitudesFiltradas = useMemo(() => solicitudes.filter((s) => cumpleFiltro(s, filtroVista)), [solicitudes, filtroVista]);
   const textoBusquedaSolicitudes = busquedaSolicitudes.trim().toLowerCase();
@@ -226,6 +218,14 @@ export default function PanelVerificador() {
       setLoadingDocumentos(false);
     }
   }, [obtenerHeadersAuditoriaUsuario]);
+
+  useEffect(() => {
+    if (selectedSolicitud?.id) {
+      cargarEstadoDocumentos(selectedSolicitud.id);
+      return;
+    }
+    setDocumentStatus(null);
+  }, [selectedSolicitud, cargarEstadoDocumentos]);
 
   const obtenerMensajeErrorRespuesta = async (response, mensajePorDefecto) => {
     try {
