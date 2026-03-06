@@ -98,6 +98,9 @@ public class Tramite {
     private LocalDateTime fechaVerificacion;
 
     @Column
+    private Boolean verificacionAprobada;
+
+    @Column
     private String firmaAlcalde;  // Firma digital
 
     @Column
@@ -377,6 +380,14 @@ public class Tramite {
 
     public void setFechaVerificacion(LocalDateTime fechaVerificacion) {
         this.fechaVerificacion = fechaVerificacion;
+    }
+
+    public Boolean getVerificacionAprobada() {
+        return verificacionAprobada;
+    }
+
+    public void setVerificacionAprobada(Boolean verificacionAprobada) {
+        this.verificacionAprobada = verificacionAprobada;
     }
 
     public String getFirmaAlcalde() {

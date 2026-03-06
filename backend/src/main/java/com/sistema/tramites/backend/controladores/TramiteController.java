@@ -78,7 +78,7 @@ public class TramiteController {
 
     @GetMapping
     public List<Map<String, Object>> listar() {
-        return tramiteRepository.findAll()
+        return tramiteRepository.findAllResumen()
                 .stream()
                 .map(this::construirResumenTramite)
                 .toList();
@@ -397,39 +397,25 @@ public class TramiteController {
                 tramite.setConsecutivoVerificador(generarSiguienteConsecutivo(anioConsecutivo));
             }
             
-            if (verificacion.isAprobado()) {
-                tramite.setEstado(EstadoTramite.EN_FIRMA);
-                tramite.setFechaVerificacion(LocalDateTime.now());
+            boolean verificacionAprobada = verificacion.isAprobado();
+            tramite.setVerificacionAprobada(verificacionAprobada);
+            tramite.setEstado(EstadoTramite.EN_FIRMA);
+            tramite.setFechaVerificacion(LocalDateTime.now());
+
+            if (verificacionAprobada) {
                 LocalDate inicioVigencia = guardadoFechaRadicacion(tramite);
                 tramite.setFechaVigencia(workingDayCalculator.calcularFechaVigencia(inicioVigencia));
-                if (tramite.getCodigoVerificacion() == null || tramite.getCodigoVerificacion().isBlank()) {
-                    tramite.setCodigoVerificacion(generarCodigoVerificacion(tramite.getNumeroRadicado()));
-                }
-            } else {
-                tramite.setEstado(EstadoTramite.RECHAZADO);
-                tramite.setFechaVerificacion(LocalDateTime.now());
-                if (tramite.getCodigoVerificacion() == null || tramite.getCodigoVerificacion().isBlank()) {
-                    tramite.setCodigoVerificacion(generarCodigoVerificacion(tramite.getNumeroRadicado()));
-                }
-                documentoGeneradoService.generarYAdjuntarPdf(tramite, false, verificacion.getObservaciones());
-                tramite.setHashDocumentoGenerado(HashUtils.sha256Hex(tramite.getContenidoPdfGenerado()));
-                subirCertificadoGeneradoADrive(tramite);
-                emailService.enviarDocumentoFinal(
-                        tramite.getCorreoElectronico(),
-                        tramite.getNombreSolicitante(),
-                        tramite.getNumeroRadicado(),
-                        false,
-                    verificacion.getObservaciones(),
-                    tramite.getContenidoPdfGenerado(),
-                    tramite.getNombrePdfGenerado()
-                );
+            }
+
+            if (tramite.getCodigoVerificacion() == null || tramite.getCodigoVerificacion().isBlank()) {
+                tramite.setCodigoVerificacion(generarCodigoVerificacion(tramite.getNumeroRadicado()));
             }
             
             Tramite actualizado = tramiteRepository.save(tramite);
-            if (verificacion.isAprobado()) {
+            if (verificacionAprobada) {
                 certificadoPreGeneracionAsyncService.pregenerarCertificadoParaFirma(actualizado.getId());
             }
-                String accionAuditoria = verificacion.isAprobado() ? "VERIFICACION_APROBADA" : "VERIFICACION_RECHAZADA";
+                String accionAuditoria = verificacionAprobada ? "VERIFICACION_APROBADA" : "VERIFICACION_RECHAZADA";
                 auditoriaTramiteService.registrarEvento(
                     actualizado.getId(),
                     usuarioVerificadorId,
@@ -440,37 +426,38 @@ public class TramiteController {
                     actualizado.getEstado()
                 );
 
-            if (verificacion.isAprobado()) {
-                List<Long> alcaldesIds = usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.ALCALDE)
+                    List<Long> alcaldesIds = usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.ALCALDE)
                         .stream()
                         .map(Usuario::getId)
                         .filter(Objects::nonNull)
                         .distinct()
                         .toList();
 
-                notificacionUsuarioService.crearParaUsuarios(
+                    String decisionTexto = verificacionAprobada ? "aprobado" : "rechazado";
+                    notificacionUsuarioService.crearParaUsuarios(
                         alcaldesIds,
                         actualizado.getId(),
                         "Solicitud lista para firma",
-                        "El trámite " + actualizado.getNumeroRadicado() + " fue aprobado por " + usernameVerificador + " y está en firma.",
-                        "INFO"
-                );
-            } else {
-                List<Long> adminsIds = usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.ADMINISTRADOR)
-                        .stream()
-                        .map(Usuario::getId)
-                        .filter(Objects::nonNull)
-                        .distinct()
-                        .toList();
+                        "El trámite " + actualizado.getNumeroRadicado() + " fue " + decisionTexto + " por " + usernameVerificador + " y está en firma de alcalde.",
+                        verificacionAprobada ? "INFO" : "WARNING"
+                    );
 
-                notificacionUsuarioService.crearParaUsuarios(
-                        adminsIds,
-                        actualizado.getId(),
-                        "Solicitud rechazada por verificador",
-                        "El trámite " + actualizado.getNumeroRadicado() + " fue rechazado por " + usernameVerificador + ".",
-                        "WARNING"
-                );
-            }
+                        if (!verificacionAprobada) {
+                        List<Long> adminsIds = usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.ADMINISTRADOR)
+                            .stream()
+                            .map(Usuario::getId)
+                            .filter(Objects::nonNull)
+                            .distinct()
+                            .toList();
+
+                        notificacionUsuarioService.crearParaUsuarios(
+                            adminsIds,
+                            actualizado.getId(),
+                            "Solicitud rechazada por verificador",
+                            "El trámite " + actualizado.getNumeroRadicado() + " fue rechazado por " + usernameVerificador + " y quedó pendiente de firma de alcalde.",
+                            "WARNING"
+                        );
+                        }
 
             var respuesta = new java.util.HashMap<String, Object>();
             respuesta.put("tramiteId", actualizado.getId());
@@ -478,7 +465,8 @@ public class TramiteController {
             respuesta.put("estado", actualizado.getEstado() != null ? actualizado.getEstado().name() : null);
             respuesta.put("fechaFirmaAlcalde", actualizado.getFechaFirmaAlcalde());
             respuesta.put("codigoVerificacion", actualizado.getCodigoVerificacion());
-            respuesta.put("mensaje", "✅ Certificado firmado y emitido correctamente");
+            respuesta.put("verificacionAprobada", actualizado.getVerificacionAprobada());
+            respuesta.put("mensaje", "✅ Solicitud verificada y enviada a firma del alcalde");
 
             return ResponseEntity.ok(respuesta);
             
@@ -688,7 +676,14 @@ public class TramiteController {
             respuesta.put("numeroRadicado", actualizado.getNumeroRadicado());
             respuesta.put("estado", actualizado.getEstado() != null ? actualizado.getEstado().name() : null);
             respuesta.put("fechaFirmaAlcalde", actualizado.getFechaFirmaAlcalde());
-            respuesta.put("mensaje", "Firma registrada. El estado cambiará a FINALIZADO cuando termine el procesamiento del certificado.");
+                boolean verificacionAprobada = esDecisionAprobada(actualizado);
+                respuesta.put("verificacionAprobada", verificacionAprobada);
+                respuesta.put(
+                    "mensaje",
+                    "Firma registrada. El estado cambiará a "
+                        + (verificacionAprobada ? "FINALIZADO" : "RECHAZADO")
+                        + " cuando termine el procesamiento del certificado."
+                );
 
             return ResponseEntity.ok(respuesta);
             
@@ -951,7 +946,7 @@ public class TramiteController {
             }
 
             Tramite tramite = optTramite.get();
-            boolean aprobado = tramite.getEstado() != EstadoTramite.RECHAZADO;
+            boolean aprobado = esDecisionAprobada(tramite);
 
             String contenido = "";
             String html = "";
@@ -1303,7 +1298,7 @@ public class TramiteController {
         return "RES-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
     }
 
-    private Map<String, Object> construirResumenTramite(Tramite tramite) {
+    private Map<String, Object> construirResumenTramite(TramiteResumenView tramite) {
         Map<String, Object> item = new HashMap<>();
         item.put("id", tramite.getId());
         item.put("numeroRadicado", tramite.getNumeroRadicado());
@@ -1314,6 +1309,7 @@ public class TramiteController {
         item.put("fechaVencimiento", tramite.getFechaVencimiento());
         item.put("fechaVigencia", tramite.getFechaVigencia());
         item.put("fechaVerificacion", tramite.getFechaVerificacion());
+        item.put("verificacionAprobada", tramite.getVerificacionAprobada());
         item.put("fechaFirmaAlcalde", tramite.getFechaFirmaAlcalde());
         item.put("tipoDocumento", tramite.getTipoDocumento());
         item.put("numeroDocumento", tramite.getNumeroDocumento());
@@ -1327,6 +1323,18 @@ public class TramiteController {
         item.put("consecutivoVerificador", tramite.getConsecutivoVerificador());
         item.put("ruta_certificado_final", tramite.getRuta_certificado_final());
         return item;
+    }
+
+    private boolean esDecisionAprobada(Tramite tramite) {
+        if (tramite == null) {
+            return true;
+        }
+
+        if (tramite.getVerificacionAprobada() != null) {
+            return Boolean.TRUE.equals(tramite.getVerificacionAprobada());
+        }
+
+        return tramite.getEstado() != EstadoTramite.RECHAZADO;
     }
 }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { API_TRAMITES_URL } from '../config/api';
+import { listarTramites } from '../services/api';
 import { formatearFechaHora as formatearFechaHoraUtil } from '../utils/dateFormat';
 import { buildUsernameHeader, getStoredUser } from '../utils/userSession';
 import { filtrarCertificadosGenerados } from '../utils/certificateFilters';
@@ -185,11 +186,9 @@ export default function PanelVerificador() {
     return documentosAdjuntos.every((doc) => !!documentStatus?.[doc.key]?.cargado);
   }, [documentStatus, loadingDocumentos, selectedSolicitud, documentosAdjuntos]);
 
-  const cargarSolicitudes = async () => {
+  const cargarSolicitudes = async ({ forceRefresh = false } = {}) => {
     try {
-      const response = await fetch(API_TRAMITES_URL);
-      if (!response.ok) throw new Error('Error al cargar solicitudes');
-      const data = await response.json();
+      const data = await listarTramites({ forceRefresh });
       setSolicitudes(data.sort((a, b) => new Date(a.fechaRadicacion) - new Date(b.fechaRadicacion)));
       setError('');
     } catch (err) {
@@ -330,7 +329,7 @@ export default function PanelVerificador() {
       setSelectedSolicitud(null);
       setObservaciones('');
       setConsecutivo('');
-      await cargarSolicitudes();
+      await cargarSolicitudes({ forceRefresh: true });
     } catch (err) {
       mostrarAvisoPanel('error', `Error: ${err.message}`);
     } finally {
@@ -376,7 +375,7 @@ export default function PanelVerificador() {
       setSelectedSolicitud(null);
       setObservaciones('');
       setConsecutivo('');
-      await cargarSolicitudes();
+      await cargarSolicitudes({ forceRefresh: true });
     } catch (err) {
       mostrarAvisoPanel('error', `Error: ${err.message}`);
     } finally {

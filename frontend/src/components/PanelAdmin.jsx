@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { API_AUTH_URL, API_TRAMITES_URL } from '../config/api';
-import { listarTramites } from '../services/api';
+import { listarTramites, obtenerMetricasOperativasAdmin } from '../services/api';
 import { formatearFecha as formatearFechaUtil, formatearFechaHora as formatearFechaHoraUtil } from '../utils/dateFormat';
 import { filtrarCertificadosGenerados } from '../utils/certificateFilters';
 import AvisoModal from './common/AvisoModal';
@@ -20,6 +20,24 @@ const getEstadoBadgeStyle = (estado) => {
 const formatoFecha = (valor) => formatearFechaUtil(valor, { fallback: '-' });
 
 const formatoFechaHora = (valor) => formatearFechaHoraUtil(valor, { fallback: '-', incluirSegundos: true });
+
+const formatoNumeroMetrica = (valor, decimales = 0) => {
+  const numero = Number(valor);
+  if (!Number.isFinite(numero)) return '-';
+  return numero.toLocaleString('es-CO', {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  });
+};
+
+const formatoDuracion = (valorSegundos) => {
+  const valor = Number(valorSegundos);
+  if (!Number.isFinite(valor)) return '-';
+  if (valor < 1) {
+    return `${Math.round(valor * 1000)} ms`;
+  }
+  return `${valor.toFixed(2)} s`;
+};
 
 export default function PanelAdmin({ usuarioActual }) {
   const filasTramiteRef = useRef({});
@@ -45,17 +63,22 @@ export default function PanelAdmin({ usuarioActual }) {
   const [subiendoDocumentoAdminKey, setSubiendoDocumentoAdminKey] = useState('');
   const [busquedaAdmin, setBusquedaAdmin] = useState('');
   const [avisoAdmin, setAvisoAdmin] = useState(null);
+  const [metricasExpandido, setMetricasExpandido] = useState(false);
+  const [intentoMetricasEnApertura, setIntentoMetricasEnApertura] = useState(false);
+  const [loadingMetricas, setLoadingMetricas] = useState(false);
+  const [errorMetricas, setErrorMetricas] = useState('');
+  const [metricasOperativas, setMetricasOperativas] = useState(null);
 
   const mostrarAvisoAdmin = (tipo, mensaje) => {
     setAvisoAdmin({ tipo, mensaje });
   };
 
-  const cargarTramites = useCallback(async ({ silenciosa = false } = {}) => {
+  const cargarTramites = useCallback(async ({ silenciosa = false, forceRefresh = false } = {}) => {
     if (!silenciosa) {
       setLoading(true);
     }
     try {
-      const data = await listarTramites();
+      const data = await listarTramites({ forceRefresh });
       setTramites(data);
     } catch (err) {
       console.error(err);
@@ -63,6 +86,22 @@ export default function PanelAdmin({ usuarioActual }) {
       if (!silenciosa) {
         setLoading(false);
       }
+    }
+  }, []);
+
+  const cargarMetricasOperativas = useCallback(async () => {
+    setLoadingMetricas(true);
+    setErrorMetricas('');
+    try {
+      const data = await obtenerMetricasOperativasAdmin();
+      setMetricasOperativas(data);
+      if (data?.available === false) {
+        setErrorMetricas('Metricas no disponibles: este backend no expone Actuator en /actuator.');
+      }
+    } catch (err) {
+      setErrorMetricas(err?.message || 'No se pudieron cargar las métricas operativas');
+    } finally {
+      setLoadingMetricas(false);
     }
   }, []);
 
@@ -103,6 +142,25 @@ export default function PanelAdmin({ usuarioActual }) {
     if (loadingUsuarios || usuariosOperativos.length > 0) return;
     cargarUsuariosOperativos();
   }, [usuarioActual?.username, usuariosExpandido, loadingUsuarios, usuariosOperativos.length, cargarUsuariosOperativos]);
+
+  useEffect(() => {
+    if (!usuarioActual?.username) return;
+    if (!metricasExpandido || intentoMetricasEnApertura) return;
+    setIntentoMetricasEnApertura(true);
+    cargarMetricasOperativas();
+  }, [usuarioActual?.username, metricasExpandido, intentoMetricasEnApertura, cargarMetricasOperativas]);
+
+  useEffect(() => {
+    if (metricasExpandido) return;
+    setIntentoMetricasEnApertura(false);
+  }, [metricasExpandido]);
+
+  useEffect(() => {
+    setMetricasExpandido(false);
+    setIntentoMetricasEnApertura(false);
+    setMetricasOperativas(null);
+    setErrorMetricas('');
+  }, [usuarioActual?.username]);
 
   useEffect(() => {
     if (!tramiteExpandidoId) return;
@@ -340,10 +398,14 @@ export default function PanelAdmin({ usuarioActual }) {
     const nuevo = tramiteExpandidoId === tramiteId ? null : tramiteId;
     setTramiteExpandidoId(nuevo);
     if (nuevo) {
+      const tareas = [];
+
       if (!documentStatusAdmin[tramiteId]) {
-        await cargarEstadoDocumentosAdmin(tramiteId);
+        tareas.push(cargarEstadoDocumentosAdmin(tramiteId));
       }
-      await cargarAuditoriaAdmin(tramiteId);
+
+      tareas.push(cargarAuditoriaAdmin(tramiteId));
+      await Promise.all(tareas);
     }
   };
 
@@ -500,8 +562,99 @@ export default function PanelAdmin({ usuarioActual }) {
 
       <div style={styles.adminCard}>
         <div style={styles.seccionHeader}>
+          <h2 style={{ ...styles.adminCardTitle, marginBottom: 0 }}>Metricas Operativas</h2>
+          <div style={styles.metricasAcciones}>
+            <button
+              style={{ ...styles.btnRefrescar, ...(loadingMetricas ? styles.btnGuardarUsuarioDisabled : {}) }}
+              onClick={cargarMetricasOperativas}
+              disabled={loadingMetricas}
+            >
+              {loadingMetricas ? 'Actualizando...' : 'Refrescar'}
+            </button>
+            <button
+              style={styles.btnToggleSeccion}
+              onClick={() => setMetricasExpandido((prev) => !prev)}
+            >
+              {metricasExpandido ? 'Ocultar' : 'Mostrar'}
+            </button>
+          </div>
+        </div>
+
+        {metricasExpandido ? (
+          <>
+            <p style={styles.adminNota}>
+              Fuente: Actuator. Ultima lectura: {metricasOperativas?.capturedAt ? formatoFechaHora(metricasOperativas.capturedAt) : '-'}
+            </p>
+            {errorMetricas ? <p style={styles.metricaError}>{errorMetricas}</p> : null}
+            {loadingMetricas && !metricasOperativas ? <p>Cargando metricas...</p> : null}
+
+            {metricasOperativas && metricasOperativas?.available !== false ? (
+              <div style={styles.metricasGrid}>
+                <div style={styles.metricaCard}>
+                  <p style={styles.metricaTitulo}>Post-firma total</p>
+                  <p style={styles.metricaValor}>{formatoNumeroMetrica(metricasOperativas?.postFirma?.total)}</p>
+                  <p style={styles.metricaDetalle}>
+                    OK: {formatoNumeroMetrica(metricasOperativas?.postFirma?.success)} | Exception: {formatoNumeroMetrica(metricasOperativas?.postFirma?.exception)}
+                  </p>
+                </div>
+
+                <div style={styles.metricaCard}>
+                  <p style={styles.metricaTitulo}>Errores de correo</p>
+                  <p style={styles.metricaValor}>{formatoNumeroMetrica(metricasOperativas?.postFirma?.emailErrors)}</p>
+                  <p style={styles.metricaDetalle}>Metrica: tramites.postfirma.email.errors</p>
+                </div>
+
+                <div style={styles.metricaCard}>
+                  <p style={styles.metricaTitulo}>Duracion post-firma (OK)</p>
+                  <p style={styles.metricaValor}>{formatoDuracion(metricasOperativas?.postFirma?.successAvgSeconds)}</p>
+                  <p style={styles.metricaDetalle}>Maximo: {formatoDuracion(metricasOperativas?.postFirma?.successMaxSeconds)}</p>
+                </div>
+
+                <div style={styles.metricaCard}>
+                  <p style={styles.metricaTitulo}>Generacion PDF total</p>
+                  <p style={styles.metricaValor}>{formatoNumeroMetrica(metricasOperativas?.pdf?.total)}</p>
+                  <p style={styles.metricaDetalle}>
+                    OK: {formatoNumeroMetrica(metricasOperativas?.pdf?.success)} | Error: {formatoNumeroMetrica(metricasOperativas?.pdf?.errorTotal)}
+                  </p>
+                </div>
+
+                <div style={styles.metricaCard}>
+                  <p style={styles.metricaTitulo}>Motor PDF</p>
+                  <p style={styles.metricaValor}>LO: {formatoNumeroMetrica(metricasOperativas?.pdf?.engineLibreoffice)}</p>
+                  <p style={styles.metricaDetalle}>docx4j: {formatoNumeroMetrica(metricasOperativas?.pdf?.engineDocx4j)}</p>
+                </div>
+
+                <div style={styles.metricaCard}>
+                  <p style={styles.metricaTitulo}>Duracion PDF</p>
+                  <p style={styles.metricaValor}>{formatoDuracion(metricasOperativas?.pdf?.avgSeconds)}</p>
+                  <p style={styles.metricaDetalle}>
+                    Maximo: {formatoDuracion(metricasOperativas?.pdf?.maxSeconds)} | Errores: {formatoNumeroMetrica(metricasOperativas?.pdf?.errors)}
+                  </p>
+                </div>
+
+                <div style={styles.metricaCard}>
+                  <p style={styles.metricaTitulo}>HTTP p95 / p99</p>
+                  <p style={styles.metricaValor}>{formatoDuracion(metricasOperativas?.http?.p95Seconds)}</p>
+                  <p style={styles.metricaDetalle}>p99: {formatoDuracion(metricasOperativas?.http?.p99Seconds)}</p>
+                </div>
+
+                <div style={styles.metricaCard}>
+                  <p style={styles.metricaTitulo}>HTTP total requests</p>
+                  <p style={styles.metricaValor}>{formatoNumeroMetrica(metricasOperativas?.http?.count)}</p>
+                  <p style={styles.metricaDetalle}>
+                    Max: {formatoDuracion(metricasOperativas?.http?.maxSeconds)} | Total Time: {formatoDuracion(metricasOperativas?.http?.totalTimeSeconds)}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+
+      <div style={styles.adminCard}>
+        <div style={styles.seccionHeader}>
           <h2 style={{ ...styles.adminCardTitle, marginBottom: 0 }}>Solicitudes Radicadas</h2>
-          <button style={styles.btnRefrescar} onClick={() => cargarTramites()}>
+          <button style={styles.btnRefrescar} onClick={() => cargarTramites({ forceRefresh: true })}>
             {loading ? 'Actualizando...' : 'Refrescar'}
           </button>
         </div>

@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS tramites (
     -- Verificación y firma
     observaciones TEXT,
     consecutivo_verificador VARCHAR(100),
+    verificacion_aprobada BOOLEAN,
     firma_alcalde VARCHAR(500),
     fecha_firma_alcalde DATETIME,
     codigo_verificacion VARCHAR(120) UNIQUE,

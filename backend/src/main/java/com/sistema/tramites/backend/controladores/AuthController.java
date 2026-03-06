@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
+import java.util.concurrent.CompletableFuture;
 import java.util.List;
 import java.util.Optional;
 
@@ -85,9 +87,8 @@ public class AuthController {
             // Generar token JWT
             String token = jwtService.generarToken(usuario);
 
-            // Actualizar fecha de último acceso
-            usuario.setFechaUltimAcceso(java.time.LocalDateTime.now());
-            usuarioRepository.save(usuario);
+            // No bloquear la respuesta del login por una actualización de auditoría.
+            actualizarUltimoAccesoAsync(usuario.getId());
 
             // Retornar respuesta con token
             AuthResponseDTO response = new AuthResponseDTO(
@@ -106,6 +107,20 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("❌ Error interno durante autenticación");
         }
+    }
+
+    private void actualizarUltimoAccesoAsync(Long usuarioId) {
+        if (usuarioId == null) {
+            return;
+        }
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                usuarioRepository.actualizarFechaUltimoAcceso(usuarioId, LocalDateTime.now());
+            } catch (Exception ex) {
+                log.debug("No se pudo actualizar fechaUltimAcceso para usuario {}: {}", usuarioId, ex.getMessage());
+            }
+        });
     }
 
     @GetMapping("/me")

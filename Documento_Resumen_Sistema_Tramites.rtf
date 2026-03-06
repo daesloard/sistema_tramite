@@ -1,123 +1,209 @@
 {\rtf1\ansi\deff0
 {\fonttbl{\f0 Calibri;}{\f1 Courier New;}}
-\viewkind4\uc1\pard\sa240\sl276\slmult1\f0\fs22
+\viewkind4\uc1\pard\sa220\sl276\slmult1\f0\fs22
 \b Documento de Resumen - Sistema de Tramites\b0\par
 \b Proyecto:\b0 Sistema de Tramites Municipales\par
-\b Fecha:\b0 2 de marzo de 2026\par
+\b Fecha:\b0 5 de marzo de 2026\par
 \b Rama de trabajo:\b0 en-pruebas\par
 \par
 \b 1. Alcance trabajado\b0\par
-Durante la sesi\'f3n se implementaron mejoras funcionales, correcciones de flujo documental, fortalecimiento de validaci\'f3n de certificados, ampliaci\'f3n del panel administrativo y recomendaciones comerciales/t\'e9cnicas para despliegue y venta del sistema.\par
+Durante la sesion se consolidaron mejoras funcionales, ajustes de estabilidad en paneles, validaciones documentales y definiciones comerciales para salida a produccion.\par
 \par
 \b 2. Mejoras funcionales implementadas\b0\par
-\b 2.1 Correcci\'f3n de documentos en Panel Verificador\b0\par
-- Se corrigi\'f3 la inconsistencia donde el panel mostraba menos documentos que los realmente cargados.\par
-- Causa detectada: diferencia de claves entre tipos JAC/Residencia en frontend/backend.\par
-- Resultado: ahora se visualizan correctamente los documentos esperados y se agreg\'f3 validaci\'f3n de desajuste.\par
+\b 2.1 Flujo documental en Verificador\b0\par
+- Se corrigieron inconsistencias de visualizacion entre documentos realmente cargados y documentos mostrados en pantalla.\par
+- Se agrego validacion explicita de desajuste documental para evitar aprobaciones con informacion incompleta.\par
 \par
-\b 2.2 Bloqueo de aprobaci\'f3n/rechazo por documentos incompletos\b0\par
-- En el panel del verificador se bloquea aprobar/rechazar si faltan documentos obligatorios.\par
-- Se muestra mensaje claro de faltantes.\par
+\b 2.2 Reglas de aprobacion/rechazo\b0\par
+- El sistema bloquea aprobar o rechazar si faltan documentos obligatorios.\par
+- Se informa al operador cuales documentos faltan antes de permitir continuar.\par
 \par
-\b 2.3 Notificaci\'f3n a administrador desde Verificador\b0\par
-- Se agreg\'f3 acci\'f3n para notificar a administradores activos cuando se requiere revisi\'f3n documental.\par
-- Incluye detalle de faltantes y mensaje contextual.\par
+\b 2.3 Notificaciones operativas\b0\par
+- Verificador puede notificar al administrador para revision documental.\par
+- Admin puede notificar al verificador cuando la documentacion ya esta en regla.\par
 \par
-\b 2.4 Gesti\'f3n desde Panel Admin\b0\par
-- Se habilit\'f3 gesti\'f3n operativa de solicitudes radicadas desde Admin.\par
-- Acciones agregadas:\par
-  * Ver estado documental por solicitud.\par
-  * Abrir/descargar documentos por tipo.\par
-  * Notificar al verificador desde Admin para retomar gesti\'f3n.\par
+\b 2.4 Panel Admin ampliado\b0\par
+- Se habilito gestion completa de documentos por tramite: ver, descargar, cargar y reemplazar.\par
+- Se agrego trazabilidad con auditoria por acciones y cambios de estado.\par
 \par
-\b 2.5 Carga de archivos desde Panel Admin\b0\par
-- Se agreg\'f3 funcionalidad para cargar/reemplazar documentos por solicitud directamente desde Admin.\par
-- Luego de cargar, se refresca estado documental autom\'e1ticamente.\par
-- La notificaci\'f3n al verificador queda habilitada cuando los documentos est\'e1n en regla.\par
+\b 2.5 Estabilidad de paneles\b0\par
+- Se corrigio un error de ejecucion que podia dejar paneles en blanco.\par
+- Se implemento contencion de errores por panel para evitar caida total de la aplicacion ante fallos aislados.\par
 \par
-\b 2.6 Etiquetas visuales de faltantes\b0\par
-- En tabla y detalle del panel admin se muestra:\par
-  * "Faltan X documento(s)"\par
-  * "Documentos en regla"\par
-  * Listado expl\'edcito de documentos faltantes\par
+\b 3. Validaciones tecnicas ejecutadas\b0\par
+- Compilacion frontend validada con \f1 npm run build\f0.\par
+- Validacion de archivos modificados sin errores activos en los cambios recientes.\par
+- Flujo de ramas aplicado: trabajo diario en \f1 en-pruebas\f0 y merge a \f1 main\f0 solo por autorizacion explicita.\par
 \par
-\b 2.7 Verificaci\'f3n de certificado con doble factor\b0\par
-- Se implement\'f3 doble validaci\'f3n adem\'e1s del radicado/c\'f3digo.\par
-- Evoluci\'f3n aplicada:\par
-  * Primer paso: validaci\'f3n por primer nombre.\par
-  * Versi\'f3n final: reto aleatorio (primer nombre o \"ultimos 3 del documento\").\par
-- Se elimin\'f3 la elecci\'f3n manual del reto por parte del usuario en UI.\par
+\b 4. Recomendacion de despliegue\b0\par
+\b Desarrollo/demo interno\b0: entorno local o costo minimo cloud.\par
+\b Produccion institucional\b0: nube administrada para disponibilidad, backup, monitoreo y seguridad operativa.\par
 \par
-\b 3. Ajustes de estructura del proyecto\b0\par
-- Se reorganizaron controladores en carpeta dedicada: \f1 backend/src/main/java/com/sistema/tramites/backend/controladores\f0\par
-- Archivos movidos: AuthController, TramiteController, FileUploadController, GlobalExceptionHandler.\par
-- Se valid\'f3 compilaci\'f3n posterior a la reorganizaci\'f3n.\par
-\par
-\b 4. Validaciones y verificaciones realizadas\b0\par
-- Revisi\'f3n de errores de archivos modificados: sin errores relevantes pendientes en cambios aplicados.\par
-- Compilaci\'f3n backend: validada en distintos momentos con \f1 mvnw -DskipTests compile\f0.\par
-- Build frontend: validado repetidamente con \f1 npm run build\f0.\par
-- Pruebas de endpoints clave: notificaci\'f3n admin/verificador y verificaci\'f3n de certificado.\par
-\par
-\b 5. Recomendaciones de ejecuci\'f3n (local vs nube)\b0\par
-\b Local\b0\par
-- Recomendado para desarrollo, pruebas y demos internas.\par
-- Menor costo inicial, mayor dependencia operativa manual.\par
-\par
-\b Nube\b0\par
-- Recomendado para producci\'f3n y venta institucional.\par
-- Ventajas: disponibilidad, seguridad, backups, monitoreo, escalabilidad y acceso remoto estable.\par
-\par
-\b 6. Servicios cr\'edticos para salida a producci\'f3n\b0\par
+\b 5. Servicios minimos para produccion\b0\par
 1) Dominio y DNS\par
 2) Hosting backend Java\par
-3) Hosting frontend\par
-4) MySQL administrado\par
+3) Hosting frontend o entrega SPA desde backend\par
+4) Base de datos administrada\par
 5) Correo transaccional\par
-6) SSL/TLS\par
+6) SSL/TLS y monitoreo basico\par
 \par
-\b 7. Estimaciones comerciales discutidas\b0\par
-\b 7.1 Volumen de referencia\b0\par
-- 6.000 solicitudes por a\'f1o: volumen bajo-medio, viable con arquitectura ligera bien administrada.\par
+\b 6. Explicacion mejorada del costo\b0\par
+\b 6.1 Como leer el costo\b0\par
+El costo total del sistema en cliente se divide en dos bloques:\par
+- \b Costo recurrente mensual (OPEX):\b0 lo que se paga cada mes para operar.\par
+- \b Costo inicial unico (SETUP/CAPEX):\b0 lo que se paga una vez para dejar produccion lista.\par
 \par
-\b 7.2 Costos cr\'edticos estimados\b0\par
-- Rango mensual recomendado: aproximadamente COP 1.2M a 2.4M (dependiendo proveedor/SKU/seguridad).\par
+\b 6.2 Supuestos usados para estimar\b0\par
+- Volumen de referencia: 6.000 solicitudes por ano (aprox. 500 por mes).\par
+- 1 ambiente productivo activo (sin ambiente de contingencia dedicado).\par
+- Operacion institucional normal: horario laboral y picos moderados.\par
+- Incluye seguridad base, respaldos y monitoreo operativo inicial.\par
 \par
-\b 7.3 Opciones de referencia para oferta\b0\par
-\b Opcion Economica\b0\par
-- Infra mensual estimada: COP 875.000\par
-- Infra anual estimada: COP 10.500.000\par
-- Setup unico sugerido: COP 12.000.000\par
+\b 6.3 Que incluye el costo mensual (OPEX)\b0\par
+- Hosting de aplicacion (backend y frontend).\par
+- Base de datos administrada.\par
+- Correo transaccional para notificaciones.\par
+- Certificado SSL, almacenamiento y transferencias basicas.\par
+- Monitoreo tecnico inicial y respaldos periodicos.\par
 \par
-\b Opcion Recomendada\b0\par
-- Infra mensual estimada: COP 2.050.000\par
-- Infra anual estimada: COP 24.600.000\par
-- Setup unico sugerido: COP 20.000.000\par
+\b 6.4 Que no incluye normalmente el OPEX\b0\par
+- Soporte funcional extendido 24/7.\par
+- Mesa de ayuda a usuarios finales por demanda alta.\par
+- Integraciones nuevas no contempladas en alcance base.\par
+- Licencias corporativas externas especiales (si aplican).\par
 \par
-\b 7.4 Que es el setup unico\b0\par
-- Es el costo inicial (una sola vez) para dejar el sistema listo en produccion:\par
-  * Despliegue inicial\par
-  * Configuracion de servicios\par
-  * Parametrizacion\par
-  * Pruebas de salida\par
-  * Capacitacion inicial\par
+\b 6.5 Que incluye el setup unico (CAPEX)\b0\par
+- Preparacion de infraestructura y despliegue inicial.\par
+- Parametrizacion de entorno, dominio, variables y seguridad base.\par
+- Pruebas de salida y ajuste de configuraciones criticas.\par
+- Capacitacion inicial y entrega operativa.\par
 \par
-\b 8. Modelo de venta sin mensualidades (aclarado)\b0\par
-- Posible vender en pago unico + entrega en nube del cliente.\par
-- Recomendacion contractual: dejar dominio, DNS y cuenta cloud a nombre del cliente desde el dia 1.\par
-- Tu cobro: licencia/implementacion/setup.\par
-- El cliente asume costos recurrentes cloud directamente con el proveedor.\par
+\b 6.6 Detalle mensual por rubro (OPEX)\b0\par
+\b Escenario Economico (COP/mes)\b0\par
+- Hosting backend (Java): 300.000 a 380.000\par
+- Hosting frontend/CDN: 30.000 a 70.000\par
+- Base de datos administrada: 220.000 a 300.000\par
+- Almacenamiento y transferencias: 60.000 a 100.000\par
+- Correo transaccional: 35.000 a 70.000\par
+- Monitoreo y logs: 60.000 a 110.000\par
+- Backups: 70.000 a 110.000\par
+- Seguridad basica (SSL/WAF basico): 60.000 a 120.000\par
+- Dominio/DNS (prorrateado): 10.000 a 20.000\par
+- \b Total mensual estimado:\b0 845.000 a 1.280.000\par
 \par
-\b 9. Riesgos principales identificados\b0\par
-- Cumplimiento de datos personales y trazabilidad documental.\par
-- Continuidad operativa (caidas, envios de correo, recuperacion de respaldo).\par
-- Riesgo comercial por ciclos largos de adquisicion institucional.\par
+\b Escenario Recomendado (COP/mes)\b0\par
+- Hosting backend (Java): 550.000 a 800.000\par
+- Hosting frontend/CDN: 70.000 a 140.000\par
+- Base de datos administrada: 450.000 a 700.000\par
+- Almacenamiento y transferencias: 120.000 a 220.000\par
+- Correo transaccional: 80.000 a 150.000\par
+- Monitoreo y logs: 180.000 a 280.000\par
+- Backups: 170.000 a 280.000\par
+- Seguridad (WAF, hardening, alertas): 150.000 a 250.000\par
+- Dominio/DNS (prorrateado): 15.000 a 30.000\par
+- \b Total mensual estimado:\b0 1.785.000 a 2.850.000\par
 \par
-\b 10. Proximos pasos sugeridos\b0\par
-1) Definir paquete comercial final (economico/recomendado/premium).\par
-2) Formalizar propuesta con alcance, exclusiones, SLA y garantia.\par
-3) Preparar despliegue en nube objetivo (idealmente cuenta del cliente).\par
-4) Cerrar checklist de seguridad y cumplimiento documental.\par
+\b Escenario Alta Disponibilidad (COP/mes)\b0\par
+- Hosting backend (redundancia): 850.000 a 1.200.000\par
+- Hosting frontend/CDN: 100.000 a 180.000\par
+- Base de datos administrada (HA): 800.000 a 1.200.000\par
+- Almacenamiento y transferencias: 180.000 a 320.000\par
+- Correo transaccional: 120.000 a 220.000\par
+- Monitoreo y observabilidad avanzada: 280.000 a 480.000\par
+- Backups y retencion ampliada: 240.000 a 420.000\par
+- Seguridad reforzada (WAF/politicas): 220.000 a 420.000\par
+- Dominio/DNS (prorrateado): 20.000 a 40.000\par
+- \b Total mensual estimado:\b0 2.810.000 a 4.480.000\par
+\par
+\b 6.7 Setup unico (CAPEX) desglosado\b0\par
+- Diseno tecnico y hardening inicial: 3.000.000 a 5.000.000\par
+- Pipeline de despliegue y automatizacion: 2.000.000 a 4.000.000\par
+- Configuracion de base de datos y migraciones: 2.000.000 a 3.000.000\par
+- Parametrizacion correo, dominio y SSL: 1.000.000 a 2.000.000\par
+- Pruebas tecnicas y funcionales de salida: 2.000.000 a 4.000.000\par
+- Capacitacion y documentacion operativa: 1.500.000 a 3.000.000\par
+- Acompanamiento de salida a produccion: 2.000.000 a 4.000.000\par
+- \b Rango global de setup:\b0 13.500.000 a 25.000.000\par
+\par
+\b 6.8 Totales por escenario (anual y primer ano)\b0\par
+\b Escenario Economico\b0\par
+- OPEX anual estimado: 10.140.000 a 15.360.000\par
+- Setup unico sugerido: 10.000.000 a 14.000.000\par
+- \b Costo total del primer ano:\b0 20.140.000 a 29.360.000\par
+\par
+\b Escenario Recomendado\b0\par
+- OPEX anual estimado: 21.420.000 a 34.200.000\par
+- Setup unico sugerido: 18.000.000 a 24.000.000\par
+- \b Costo total del primer ano:\b0 39.420.000 a 58.200.000\par
+\par
+\b Escenario Alta Disponibilidad\b0\par
+- OPEX anual estimado: 33.720.000 a 53.760.000\par
+- Setup unico sugerido: 25.000.000 a 35.000.000\par
+- \b Costo total del primer ano:\b0 58.720.000 a 88.760.000\par
+\par
+\b 6.9 Formula simple para propuesta comercial\b0\par
+\f1 Total primer ano = (costo mensual x 12) + setup unico\f0\par
+\f1 Total anos siguientes = costo mensual x 12\f0\par
+\par
+\b 6.10 Comparativa de precios por proveedor (referencial)\b0\par
+\b Supuesto de conversion:\b0 1 USD = COP 4.100 (referencia para comparar, puede variar).\par
+\par
+\b Opcion A - Render + Neon + Resend (Piloto/Economica)\b0\par
+- Rango mensual: USD 140 a 220 (COP 574.000 a 902.000)\par
+- Rango anual: COP 6.888.000 a 10.824.000\par
+- Perfil: costo bajo, buena para salida rapida y volumen moderado.\par
+\par
+\b Opcion B - Railway + PlanetScale + Resend (Economica Plus)\b0\par
+- Rango mensual: USD 180 a 280 (COP 738.000 a 1.148.000)\par
+- Rango anual: COP 8.856.000 a 13.776.000\par
+- Perfil: simple de operar, util para fase comercial inicial.\par
+\par
+\b Opcion C - DigitalOcean (App/VPS + Managed MySQL + Spaces + Mail)\b0\par
+- Rango mensual: USD 230 a 360 (COP 943.000 a 1.476.000)\par
+- Rango anual: COP 11.316.000 a 17.712.000\par
+- Perfil: balance costo-control, mas flexible tecnicamente.\par
+\par
+\b Opcion D - Azure PaaS (App Service + MySQL Flexible + Storage + Monitor)\b0\par
+- Rango mensual: USD 350 a 620 (COP 1.435.000 a 2.542.000)\par
+- Rango anual: COP 17.220.000 a 30.504.000\par
+- Perfil: recomendada para entidad publica por gobierno, seguridad y escalabilidad.\par
+\par
+\b Opcion E - AWS (ECS/Fargate + RDS + S3 + CloudWatch + SES)\b0\par
+- Rango mensual: USD 380 a 700 (COP 1.558.000 a 2.870.000)\par
+- Rango anual: COP 18.696.000 a 34.440.000\par
+- Perfil: robusta para crecimiento y alta disponibilidad.\par
+\par
+\b Opcion F - Azure Alta Disponibilidad (2 instancias + HA + WAF)\b0\par
+- Rango mensual: USD 700 a 1.200 (COP 2.870.000 a 4.920.000)\par
+- Rango anual: COP 34.440.000 a 59.040.000\par
+- Perfil: operacion critica con mayor continuidad y tolerancia a fallos.\par
+\par
+\b 6.11 Lectura rapida para decidir la opcion mas conveniente\b0\par
+- Si quieres entrar rapido al mercado con bajo costo: Opcion A o B.\par
+- Si buscas equilibrio costo/control tecnico: Opcion C.\par
+- Si el cliente es alcaldia/institucion con requerimientos formales: Opcion D.\par
+- Si esperas crecimiento fuerte o exigencia de disponibilidad: Opcion E o F.\par
+\par
+\b 6.12 Costos que pueden mover la factura final\b0\par
+- Trafico de salida (egress) y almacenamiento historico de documentos.\par
+- Cantidad real de correos enviados por mes.\par
+- Retencion de backups y monitoreo avanzado.\par
+- Soporte extendido (horarios, SLA y mesa de ayuda).\par
+\par
+\b 7. Modelo de venta recomendado\b0\par
+- Si se vende sin mensualidad propia, el cliente paga directamente su nube y tu cobras licencia + implementacion + setup.\par
+- Recomendado: dominio y cuenta cloud a nombre del cliente desde el inicio para continuidad juridica y tecnica.\par
+\par
+\b 8. Riesgos y consideraciones\b0\par
+- Variacion de costo por proveedor cloud, region y tipo de base de datos.\par
+- Incremento de costo por crecimiento de volumen, mayor retencion documental o soporte extendido.\par
+- Requisito de cumplimiento en datos personales y trazabilidad institucional.\par
+\par
+\b 9. Proximos pasos sugeridos\b0\par
+1) Elegir escenario comercial objetivo (Economico, Recomendado o Alta Disponibilidad).\par
+2) Definir SLA y alcance de soporte del contrato.\par
+3) Cerrar cotizacion formal con items incluidos/excluidos.\par
+4) Programar despliegue en cuenta cloud del cliente.\par
 \par
 \b Fin del documento\b0\par
 }

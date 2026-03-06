@@ -35,6 +35,9 @@ public class EmailService {
     @Value("${app.mail.retry-delay-ms:700}")
     private long esperaReintentoMs;
 
+    @Value("${app.mail.send-rejected-result:false}")
+    private boolean enviarResultadoRechazado;
+
     @Autowired
     public EmailService(JavaMailSender mailSender) {
         this.mailSender = mailSender;
@@ -210,6 +213,11 @@ public class EmailService {
                                      boolean aprobado, String observaciones,
                                      byte[] adjuntoPdf, String nombreAdjunto) {
         try {
+            if (!aprobado && !enviarResultadoRechazado) {
+                logger.info("⏸️ Envío de correo de rechazo deshabilitado por configuración. Radicado={}", numeroRadicado);
+                return;
+            }
+
             String destino = normalizarCorreo(correoDestino);
             if (destino.isBlank()) {
                 logger.warn("⚠️ Se omitió envío de resultado: correo destino vacío. Radicado={}", numeroRadicado);

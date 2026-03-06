@@ -4,11 +4,16 @@ import com.sistema.tramites.backend.NotificacionUsuario;
 import com.sistema.tramites.backend.NotificacionUsuarioService;
 import com.sistema.tramites.backend.Usuario;
 import com.sistema.tramites.backend.UsuarioRepository;
+import com.sistema.tramites.backend.WebPushService;
+import com.sistema.tramites.backend.WebPushSubscribeRequestDTO;
+import com.sistema.tramites.backend.WebPushUnsubscribeRequestDTO;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,11 +29,78 @@ public class NotificacionController {
 
     private final UsuarioRepository usuarioRepository;
     private final NotificacionUsuarioService notificacionUsuarioService;
+    private final WebPushService webPushService;
 
     public NotificacionController(UsuarioRepository usuarioRepository,
-                                  NotificacionUsuarioService notificacionUsuarioService) {
+                                  NotificacionUsuarioService notificacionUsuarioService,
+                                  WebPushService webPushService) {
         this.usuarioRepository = usuarioRepository;
         this.notificacionUsuarioService = notificacionUsuarioService;
+        this.webPushService = webPushService;
+    }
+
+    @GetMapping("/webpush/public-key")
+    public ResponseEntity<?> obtenerLlavePublicaWebPush() {
+        Map<String, Object> respuesta = new HashMap<>();
+        respuesta.put("enabled", webPushService.isEnabled());
+        respuesta.put("publicKey", webPushService.getPublicKey());
+        return ResponseEntity.ok(respuesta);
+    }
+
+    @PostMapping("/webpush/subscribe")
+    public ResponseEntity<?> registrarSuscripcionWebPush(
+            @RequestBody(required = false) WebPushSubscribeRequestDTO request,
+            @RequestHeader(value = "User-Agent", required = false) String userAgent,
+            @RequestHeader(value = "X-Username", required = false) String usernameHeader,
+            @RequestHeader(value = "X-Admin-Username", required = false) String adminUsernameHeader) {
+        Optional<Usuario> usuarioOpt = resolverUsuarioPorHeaders(usernameHeader, adminUsernameHeader);
+        if (usuarioOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body("❌ Usuario no válido o inactivo");
+        }
+
+        Usuario usuario = usuarioOpt.get();
+        webPushService.registrarSuscripcion(usuario.getId(), request, userAgent);
+        return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    @DeleteMapping("/webpush/subscribe")
+    public ResponseEntity<?> desactivarSuscripcionWebPush(
+            @RequestBody(required = false) WebPushUnsubscribeRequestDTO request,
+            @RequestHeader(value = "X-Username", required = false) String usernameHeader,
+            @RequestHeader(value = "X-Admin-Username", required = false) String adminUsernameHeader) {
+        Optional<Usuario> usuarioOpt = resolverUsuarioPorHeaders(usernameHeader, adminUsernameHeader);
+        if (usuarioOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body("❌ Usuario no válido o inactivo");
+        }
+
+        String endpoint = request != null ? request.getEndpoint() : null;
+        webPushService.desactivarSuscripcion(usuarioOpt.get().getId(), endpoint);
+        return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    @PostMapping("/webpush/test")
+    public ResponseEntity<?> enviarPushPrueba(
+            @RequestBody(required = false) Map<String, String> payload,
+            @RequestHeader(value = "X-Username", required = false) String usernameHeader,
+            @RequestHeader(value = "X-Admin-Username", required = false) String adminUsernameHeader) {
+        Optional<Usuario> usuarioOpt = resolverUsuarioPorHeaders(usernameHeader, adminUsernameHeader);
+        if (usuarioOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body("❌ Usuario no válido o inactivo");
+        }
+
+        Usuario usuario = usuarioOpt.get();
+        String titulo = payload != null && payload.get("titulo") != null && !payload.get("titulo").isBlank()
+                ? payload.get("titulo").trim()
+                : "Prueba de notificaciones push";
+        String mensaje = payload != null && payload.get("mensaje") != null && !payload.get("mensaje").isBlank()
+                ? payload.get("mensaje").trim()
+                : "Push activo para " + usuario.getUsername() + " en Sistema de Tramites.";
+
+        notificacionUsuarioService.crearNotificacion(usuario.getId(), null, titulo, mensaje, "INFO");
+        return ResponseEntity.ok(Map.of("ok", true, "mensaje", "Notificación de prueba enviada"));
     }
 
     @GetMapping("/mis")
