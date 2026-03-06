@@ -50,6 +50,7 @@ public class TramiteController {
     private final CertificadoPreGeneracionAsyncService certificadoPreGeneracionAsyncService;
     private final CertificadoPostFirmaAsyncService certificadoPostFirmaAsyncService;
     private final FirmaAlcaldeAsyncService firmaAlcaldeAsyncService;
+    private final SolicitudResidenciaAsyncService solicitudResidenciaAsyncService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public TramiteController(TramiteRepository tramiteRepository, 
@@ -62,7 +63,8 @@ public class TramiteController {
                            NotificacionUsuarioService notificacionUsuarioService,
                            CertificadoPreGeneracionAsyncService certificadoPreGeneracionAsyncService,
                            CertificadoPostFirmaAsyncService certificadoPostFirmaAsyncService,
-                           FirmaAlcaldeAsyncService firmaAlcaldeAsyncService) {
+                           FirmaAlcaldeAsyncService firmaAlcaldeAsyncService,
+                           SolicitudResidenciaAsyncService solicitudResidenciaAsyncService) {
         this.tramiteRepository = tramiteRepository;
         this.workingDayCalculator = workingDayCalculator;
         this.emailService = emailService;
@@ -74,6 +76,7 @@ public class TramiteController {
         this.certificadoPreGeneracionAsyncService = certificadoPreGeneracionAsyncService;
         this.certificadoPostFirmaAsyncService = certificadoPostFirmaAsyncService;
         this.firmaAlcaldeAsyncService = firmaAlcaldeAsyncService;
+        this.solicitudResidenciaAsyncService = solicitudResidenciaAsyncService;
     }
 
     @GetMapping
@@ -160,127 +163,6 @@ public class TramiteController {
             tramite.setTelefono(solicitud.getTelefono());
             tramite.setCorreoElectronico(normalizarCorreo(solicitud.getCorreoElectronico()));
             tramite.setTipo_certificado(solicitud.getTipo_certificado());
-
-            String driveFolderId = null;
-            if (driveStorageService.isEnabled()) {
-                driveFolderId = obtenerOCrearCarpetaDrive(tramite);
-            }
-            
-                // Guardar documentos en BLOB si se envían
-                if (solicitud.getDocumento_identidad_base64() != null && !solicitud.getDocumento_identidad_base64().isEmpty()) {
-                byte[] documentoIdentidad = Base64.getDecoder()
-                    .decode(solicitud.getDocumento_identidad_base64());
-                String nombreIdentidad = solicitud.getDocumento_identidad_nombre();
-                String tipoIdentidad = solicitud.getDocumento_identidad_tipo();
-                String nombreFinalIdentidad = nombreIdentidad != null && !nombreIdentidad.isBlank()
-                    ? nombreIdentidad
-                    : "documento_identidad_" + System.currentTimeMillis();
-                String tipoFinalIdentidad = tipoIdentidad != null && !tipoIdentidad.isBlank()
-                    ? tipoIdentidad
-                    : "application/pdf";
-                tramite.setNombreArchivoIdentidad(nombreIdentidad != null && !nombreIdentidad.isBlank()
-                    ? nombreIdentidad
-                    : "documento_identidad_" + System.currentTimeMillis());
-                tramite.setTipoContenidoIdentidad(tipoIdentidad != null && !tipoIdentidad.isBlank()
-                    ? tipoIdentidad
-                    : "application/pdf");
-
-                if (driveStorageService.isEnabled()) {
-                    String driveId = driveStorageService.uploadFileToFolder(nombreFinalIdentidad, tipoFinalIdentidad, documentoIdentidad, driveFolderId);
-                    tramite.setRuta_documento_identidad(DRIVE_PREFIX + driveId);
-                    tramite.setContenidoDocumentoIdentidad(null);
-                } else {
-                    tramite.setContenidoDocumentoIdentidad(documentoIdentidad);
-                }
-                }
-
-                if (solicitud.getDocumento_solicitud_base64() != null && !solicitud.getDocumento_solicitud_base64().isEmpty()) {
-                byte[] documentoSolicitud = Base64.getDecoder()
-                    .decode(solicitud.getDocumento_solicitud_base64());
-                String nombreSolicitud = solicitud.getDocumento_solicitud_nombre();
-                String tipoSolicitud = solicitud.getDocumento_solicitud_tipo();
-                String nombreFinalSolicitud = nombreSolicitud != null && !nombreSolicitud.isBlank()
-                    ? nombreSolicitud
-                    : "documento_solicitud_" + System.currentTimeMillis();
-                String tipoFinalSolicitud = tipoSolicitud != null && !tipoSolicitud.isBlank()
-                    ? tipoSolicitud
-                    : "application/pdf";
-                tramite.setNombreArchivoSolicitud(nombreSolicitud != null && !nombreSolicitud.isBlank()
-                    ? nombreSolicitud
-                    : "documento_solicitud_" + System.currentTimeMillis());
-                tramite.setTipoContenidoSolicitud(tipoSolicitud != null && !tipoSolicitud.isBlank()
-                    ? tipoSolicitud
-                    : "application/pdf");
-
-                if (driveStorageService.isEnabled()) {
-                    String driveId = driveStorageService.uploadFileToFolder(nombreFinalSolicitud, tipoFinalSolicitud, documentoSolicitud, driveFolderId);
-                    tramite.setRuta_documento_solicitud(DRIVE_PREFIX + driveId);
-                    tramite.setContenidoDocumentoSolicitud(null);
-                } else {
-                    tramite.setContenidoDocumentoSolicitud(documentoSolicitud);
-                }
-                }
-
-                if (solicitud.getCertificado_base64() != null && !solicitud.getCertificado_base64().isEmpty()) {
-                byte[] certificado = Base64.getDecoder()
-                    .decode(solicitud.getCertificado_base64());
-                String nombreCertificado = solicitud.getCertificado_nombre();
-                String tipoCertificado = solicitud.getCertificado_tipo();
-                String nombreFinal = nombreCertificado != null && !nombreCertificado.isBlank()
-                    ? nombreCertificado
-                    : "certificado_" + System.currentTimeMillis();
-                String tipoFinal = tipoCertificado != null && !tipoCertificado.isBlank()
-                    ? tipoCertificado
-                    : "application/pdf";
-
-                String driveIdCertificado = null;
-                if (driveStorageService.isEnabled()) {
-                    driveIdCertificado = driveStorageService.uploadFileToFolder(nombreFinal, tipoFinal, certificado, driveFolderId);
-                }
-
-                // Respaldo genérico: garantiza disponibilidad del 3er adjunto en correo de radicación
-                tramite.setContenidoDocumentoResidencia(driveIdCertificado != null ? null : certificado);
-                tramite.setNombreArchivoResidencia(nombreFinal);
-                tramite.setTipoContenidoResidencia(tipoFinal);
-                if (driveIdCertificado != null) {
-                    tramite.setRuta_certificado(DRIVE_PREFIX + driveIdCertificado);
-                }
-
-                String tipoSeleccionado = solicitud.getTipo_certificado();
-                if ("SISBEN".equalsIgnoreCase(tipoSeleccionado)) {
-                    tramite.setContenidoCertificadoSisben(driveIdCertificado != null ? null : certificado);
-                    tramite.setNombreArchivoSisben(nombreFinal);
-                    tramite.setTipoContenidoSisben(tipoFinal);
-                    if (driveIdCertificado != null) {
-                        tramite.setRuta_certificado_sisben(DRIVE_PREFIX + driveIdCertificado);
-                    }
-                } else if ("ELECTORAL".equalsIgnoreCase(tipoSeleccionado)) {
-                    tramite.setContenidoCertificadoElectoral(driveIdCertificado != null ? null : certificado);
-                    tramite.setNombreArchivoElectoral(nombreFinal);
-                    tramite.setTipoContenidoElectoral(tipoFinal);
-                    if (driveIdCertificado != null) {
-                        tramite.setRuta_certificado_electoral(DRIVE_PREFIX + driveIdCertificado);
-                    }
-                } else {
-                    tramite.setContenidoDocumentoResidencia(driveIdCertificado != null ? null : certificado);
-                    tramite.setNombreArchivoResidencia(nombreFinal);
-                    tramite.setTipoContenidoResidencia(tipoFinal);
-                    if (driveIdCertificado != null) {
-                        tramite.setRuta_certificado(DRIVE_PREFIX + driveIdCertificado);
-                    }
-                }
-                }
-            
-            // Rutas legacy para compatibilidad
-            if (tramite.getRuta_documento_solicitud() == null || tramite.getRuta_documento_solicitud().isBlank()) {
-                tramite.setRuta_documento_solicitud("doc_solicitud_" + System.currentTimeMillis());
-            }
-            if (tramite.getRuta_documento_identidad() == null || tramite.getRuta_documento_identidad().isBlank()) {
-                tramite.setRuta_documento_identidad("doc_identidad_" + System.currentTimeMillis());
-            }
-            if (tramite.getRuta_certificado() == null || tramite.getRuta_certificado().isBlank()) {
-                tramite.setRuta_certificado("certificado_" + System.currentTimeMillis());
-            }
             
             // Calcular vencimiento (10 días hábiles)
             LocalDate fechaVencimiento = workingDayCalculator
@@ -293,6 +175,11 @@ public class TramiteController {
             
             // Guardar en BD
             Tramite guardado = tramiteRepository.save(tramite);
+
+                solicitudResidenciaAsyncService.procesarDocumentacionRadicada(
+                    guardado.getId(),
+                    SolicitudResidenciaAsyncService.DocumentosRadicacionPayload.fromSolicitud(solicitud)
+                );
 
                 auditoriaTramiteService.registrarEvento(
                     guardado.getId(),
@@ -343,13 +230,11 @@ public class TramiteController {
             respuesta.put("estado", "RADICADO");
                 respuesta.put("driveHabilitado", driveStorageService.isEnabled());
                 respuesta.put("driveFolderId", guardado.getDriveFolderId());
-                respuesta.put("almacenamientoIdentidad", extraerDriveFileId(guardado.getRuta_documento_identidad()) != null ? "DRIVE" : "BD");
-                respuesta.put("almacenamientoSolicitud", extraerDriveFileId(guardado.getRuta_documento_solicitud()) != null ? "DRIVE" : "BD");
-                respuesta.put("almacenamientoCertificado", extraerDriveFileId(guardado.getRuta_certificado()) != null
-                    || extraerDriveFileId(guardado.getRuta_certificado_sisben()) != null
-                    || extraerDriveFileId(guardado.getRuta_certificado_electoral()) != null
-                    ? "DRIVE" : "BD");
-            respuesta.put("mensaje", "Solicitud radicada exitosamente");
+                respuesta.put("almacenamientoIdentidad", "PENDIENTE_ASYNC");
+                respuesta.put("almacenamientoSolicitud", "PENDIENTE_ASYNC");
+                respuesta.put("almacenamientoCertificado", "PENDIENTE_ASYNC");
+                respuesta.put("procesamientoDocumentacion", "EN_COLA");
+            respuesta.put("mensaje", "Solicitud radicada exitosamente. La documentacion se esta procesando en segundo plano");
 
             return ResponseEntity.status(HttpStatus.CREATED).body(respuesta);
             
@@ -655,6 +540,15 @@ public class TramiteController {
             
             Tramite actualizado = tramiteRepository.save(tramite);
             long duracionPersistencia = millisDesde(inicioPersistencia);
+
+            auditoriaTramiteService.registrarEventoInmediato(
+                actualizado.getId(),
+                usuarioAlcalde.getId(),
+                "FIRMA_ALCALDE_REGISTRADA",
+                "Firma registrada para radicado " + actualizado.getNumeroRadicado() + ". Inicia procesamiento post-firma.",
+                actualizado.getEstado(),
+                actualizado.getEstado()
+            );
 
             long inicioPostFirma = System.nanoTime();
             certificadoPostFirmaAsyncService.procesarPostFirma(actualizado.getId());

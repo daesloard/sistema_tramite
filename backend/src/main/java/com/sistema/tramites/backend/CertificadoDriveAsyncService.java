@@ -13,11 +13,14 @@ public class CertificadoDriveAsyncService {
 
     private final TramiteRepository tramiteRepository;
     private final DriveStorageService driveStorageService;
+    private final AuditoriaTramiteService auditoriaTramiteService;
 
     public CertificadoDriveAsyncService(TramiteRepository tramiteRepository,
-                                        DriveStorageService driveStorageService) {
+                                        DriveStorageService driveStorageService,
+                                        AuditoriaTramiteService auditoriaTramiteService) {
         this.tramiteRepository = tramiteRepository;
         this.driveStorageService = driveStorageService;
+        this.auditoriaTramiteService = auditoriaTramiteService;
     }
 
     @Async("driveTaskExecutor")
@@ -53,11 +56,28 @@ public class CertificadoDriveAsyncService {
             tramite.setRuta_certificado_final(DRIVE_PREFIX + driveFileId);
             tramiteRepository.save(tramite);
 
+            auditoriaTramiteService.registrarEventoInmediato(
+                    tramite.getId(),
+                    null,
+                    "POST_FIRMA_DRIVE_OK",
+                    "Certificado final cargado a Drive para radicado " + tramite.getNumeroRadicado(),
+                    tramite.getEstado(),
+                    tramite.getEstado()
+            );
+
             long duracionMs = (System.nanoTime() - inicio) / 1_000_000;
             log.info("Carga asíncrona a Drive completada. Trámite={} DriveFileId={} Duración={}ms", tramiteId, driveFileId, duracionMs);
         } catch (Exception ex) {
             long duracionMs = (System.nanoTime() - inicio) / 1_000_000;
             log.warn("Falló carga asíncrona a Drive para trámite {} tras {}ms: {}", tramiteId, duracionMs, ex.getMessage());
+            auditoriaTramiteService.registrarEventoInmediato(
+                    tramiteId,
+                    null,
+                    "POST_FIRMA_DRIVE_ERROR",
+                    "Falló carga de certificado a Drive para trámite " + tramiteId + ": " + ex.getMessage(),
+                    null,
+                    null
+            );
         }
     }
 

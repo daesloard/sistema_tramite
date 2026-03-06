@@ -53,6 +53,15 @@ public class CertificadoPostFirmaAsyncService {
                 return;
             }
 
+            auditoriaTramiteService.registrarEventoInmediato(
+                    tramite.getId(),
+                    null,
+                    "POST_FIRMA_INICIADA",
+                    "Inicio de post-firma para radicado " + tramite.getNumeroRadicado(),
+                    tramite.getEstado(),
+                    tramite.getEstado()
+            );
+
             boolean verificacionAprobada = resolverDecisionVerificacion(tramite);
 
             EstadoTramite estadoAnterior = tramite.getEstado();
@@ -86,6 +95,14 @@ public class CertificadoPostFirmaAsyncService {
 
             if (contenidoPdf == null || contenidoPdf.length == 0) {
                 log.warn("No se pudo generar PDF final para trámite {}. Se omite envío de correo.", tramiteId);
+                auditoriaTramiteService.registrarEventoInmediato(
+                        tramite.getId(),
+                        null,
+                        "POST_FIRMA_SIN_PDF",
+                        "No fue posible generar PDF final durante post-firma para radicado " + tramite.getNumeroRadicado(),
+                        estadoAnterior,
+                        estadoAnterior
+                );
                 outcome = "pdf_generation_failed";
                 return;
             }
@@ -104,7 +121,7 @@ public class CertificadoPostFirmaAsyncService {
             }
 
             Long usuarioAlcaldeId = (tramite.getUsuarioAlcalde() != null) ? tramite.getUsuarioAlcalde().getId() : null;
-            auditoriaTramiteService.registrarEvento(
+            auditoriaTramiteService.registrarEventoInmediato(
                 tramite.getId(),
                 usuarioAlcaldeId,
                 "FIRMA_ALCALDE",
@@ -116,6 +133,15 @@ public class CertificadoPostFirmaAsyncService {
             );
 
             certificadoDriveAsyncService.subirCertificadoFirmado(tramite.getId());
+
+                auditoriaTramiteService.registrarEventoInmediato(
+                    tramite.getId(),
+                    usuarioAlcaldeId,
+                    "POST_FIRMA_ENCOLADA_DRIVE",
+                    "Certificado final encolado para carga a Drive de radicado " + tramite.getNumeroRadicado(),
+                    tramite.getEstado(),
+                    tramite.getEstado()
+                );
 
             try {
                 emailService.enviarDocumentoFinal(
@@ -141,6 +167,14 @@ public class CertificadoPostFirmaAsyncService {
             outcome = "exception";
             long duracionMs = (System.nanoTime() - inicio) / 1_000_000;
             log.warn("Falló post-firma asíncrona para trámite {} tras {}ms: {}", tramiteId, duracionMs, ex.getMessage());
+            auditoriaTramiteService.registrarEventoInmediato(
+                    tramiteId,
+                    null,
+                    "POST_FIRMA_ERROR",
+                    "Error durante post-firma de trámite " + tramiteId + ": " + ex.getMessage(),
+                    null,
+                    null
+            );
         } finally {
             long duracionNanos = System.nanoTime() - inicio;
             Timer.builder("tramites.postfirma.duration")
