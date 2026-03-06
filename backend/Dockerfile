@@ -9,10 +9,13 @@ COPY mvnw mvnw
 COPY mvnw.cmd mvnw.cmd
 RUN chmod +x mvnw
 
-RUN ./mvnw -q -DskipTests dependency:go-offline
+# Evita logs silenciosos en CI y reutiliza cache Maven para acelerar deploys.
+RUN --mount=type=cache,target=/root/.m2 \
+	./mvnw -B -ntp -DskipTests -Dmaven.wagon.http.retryHandler.count=3 dependency:go-offline
 
 COPY src ./src
-RUN ./mvnw -q clean package -DskipTests
+RUN --mount=type=cache,target=/root/.m2 \
+	./mvnw -B -ntp -DskipTests -Dmaven.wagon.http.retryHandler.count=3 clean package
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
