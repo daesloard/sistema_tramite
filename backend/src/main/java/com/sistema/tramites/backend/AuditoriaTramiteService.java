@@ -26,6 +26,24 @@ public class AuditoriaTramiteService {
                                 String descripcion,
                                 EstadoTramite estadoAnterior,
                                 EstadoTramite estadoNuevo) {
+        registrarEventoInterno(tramiteId, usuarioId, accion, descripcion, estadoAnterior, estadoNuevo);
+    }
+
+    public void registrarEventoInmediato(Long tramiteId,
+                                         Long usuarioId,
+                                         String accion,
+                                         String descripcion,
+                                         EstadoTramite estadoAnterior,
+                                         EstadoTramite estadoNuevo) {
+        registrarEventoInterno(tramiteId, usuarioId, accion, descripcion, estadoAnterior, estadoNuevo);
+    }
+
+    private void registrarEventoInterno(Long tramiteId,
+                                        Long usuarioId,
+                                        String accion,
+                                        String descripcion,
+                                        EstadoTramite estadoAnterior,
+                                        EstadoTramite estadoNuevo) {
         if (tramiteId == null || accion == null || accion.isBlank()) {
             return;
         }

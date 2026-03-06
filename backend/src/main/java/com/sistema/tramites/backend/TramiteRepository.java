@@ -11,6 +11,10 @@ public interface TramiteRepository extends JpaRepository<Tramite, Long> {
 	Optional<Tramite> findByNumeroRadicadoIgnoreCase(String numeroRadicado);
 	Optional<Tramite> findByCodigoVerificacionIgnoreCase(String codigoVerificacion);
 	List<Tramite> findAllByFechaRadicacionBetweenAndConsecutivoVerificadorIsNotNull(LocalDateTime inicio, LocalDateTime fin);
+	List<Tramite> findTop100ByEstadoAndFirmaAlcaldeIsNotNullAndFechaFirmaAlcaldeBeforeOrderByFechaFirmaAlcaldeAsc(
+		EstadoTramite estado,
+		LocalDateTime fechaLimite
+	);
 
 	@Query("""
 			select
