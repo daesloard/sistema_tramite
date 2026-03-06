@@ -35,7 +35,9 @@ public interface TramiteRepository extends JpaRepository<Tramite, Long> {
 				t.tipo_certificado as tipo_certificado,
 				t.observaciones as observaciones,
 				t.consecutivoVerificador as consecutivoVerificador,
-				t.ruta_certificado_final as ruta_certificado_final
+				t.ruta_certificado_final as ruta_certificado_final,
+				t.nombrePdfGenerado as nombrePdfGenerado,
+				t.motorPdfGenerado as motorPdfGenerado
 			from Tramite t
 			order by t.fechaRadicacion asc
 		""")

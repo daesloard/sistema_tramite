@@ -254,9 +254,11 @@ export default function PanelAlcalde() {
 
           <div style={styles.busquedaWrap}>
             <input
+              name="busquedaSolicitudesAlcalde"
               style={styles.busquedaInput}
               placeholder="Buscar por radicado, solicitante, documento, estado o tipo..."
               value={busquedaSolicitudes}
+              autoComplete="new-password"
               onChange={(e) => setBusquedaSolicitudes(e.target.value)}
             />
             {busquedaSolicitudes.trim() ? (

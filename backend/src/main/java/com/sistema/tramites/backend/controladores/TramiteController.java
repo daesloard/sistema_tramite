@@ -148,7 +148,12 @@ public class TramiteController {
             
             // Datos específicos del certificado
             tramite.setTipoDocumento(solicitud.getTipoDocumento());
-            tramite.setNumeroDocumento(solicitud.getNumeroDocumento());
+            String numeroDocumento = solicitud.getNumeroDocumento() == null ? "" : solicitud.getNumeroDocumento().trim();
+            if (!numeroDocumento.matches("\\d+")) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("El numero de documento solo debe contener digitos");
+            }
+            tramite.setNumeroDocumento(numeroDocumento);
             tramite.setLugarExpedicionDocumento(solicitud.getLugarExpedicionDocumento());
             tramite.setDireccionResidencia(solicitud.getDireccionResidencia());
             tramite.setBarrioResidencia(solicitud.getBarrioResidencia());
@@ -787,6 +792,9 @@ public class TramiteController {
             if (documento.isBlank()) {
                 return ResponseEntity.badRequest().body("Número de documento requerido");
             }
+            if (!documento.matches("\\d+")) {
+                return ResponseEntity.badRequest().body("El numero de documento solo debe contener digitos");
+            }
 
             List<java.util.Map<String, Object>> resueltas = tramiteRepository.findAll().stream()
                     .filter(t -> t.getNumeroDocumento() != null && documento.equalsIgnoreCase(t.getNumeroDocumento().trim()))
@@ -1171,8 +1179,12 @@ public class TramiteController {
             return null;
         }
 
-        String soloNumeros = valor.trim().replaceAll("\\D", "");
+        String soloNumeros = valor.trim();
         if (soloNumeros.isBlank()) {
+            return null;
+        }
+
+        if (!soloNumeros.matches("\\d+")) {
             return null;
         }
 
@@ -1322,6 +1334,8 @@ public class TramiteController {
         item.put("observaciones", tramite.getObservaciones());
         item.put("consecutivoVerificador", tramite.getConsecutivoVerificador());
         item.put("ruta_certificado_final", tramite.getRuta_certificado_final());
+        item.put("nombrePdfGenerado", tramite.getNombrePdfGenerado());
+        item.put("motorPdfGenerado", tramite.getMotorPdfGenerado());
         return item;
     }
 

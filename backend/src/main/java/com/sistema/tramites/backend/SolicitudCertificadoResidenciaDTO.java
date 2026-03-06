@@ -2,6 +2,7 @@ package com.sistema.tramites.backend;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Pattern;
 
 public class SolicitudCertificadoResidenciaDTO {
 
@@ -12,6 +13,7 @@ public class SolicitudCertificadoResidenciaDTO {
     private String tipoDocumento;
 
     @NotBlank
+    @Pattern(regexp = "\\d+", message = "El numero de documento solo debe contener digitos")
     private String numeroDocumento;
 
     @NotBlank

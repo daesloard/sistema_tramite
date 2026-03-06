@@ -33,7 +33,8 @@ export default function FormularioCertificado({ onIrAVerificar }) {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const valorNormalizado = name === 'numeroDocumento' ? value.replace(/\D/g, '') : value;
+    setFormData((prev) => ({ ...prev, [name]: valorNormalizado }));
     setError('');
   };
 
@@ -62,6 +63,10 @@ export default function FormularioCertificado({ onIrAVerificar }) {
       case 2:
         if (!formData.nombre || !formData.numeroDocumento || !formData.lugarExpedicionDocumento) {
           setError('Por favor completa todos los campos requeridos');
+          return false;
+        }
+        if (!/^\d+$/.test(formData.numeroDocumento)) {
+          setError('El numero de documento solo debe contener numeros');
           return false;
         }
         break;
@@ -233,6 +238,9 @@ export default function FormularioCertificado({ onIrAVerificar }) {
               value={formData.numeroDocumento}
               onChange={handleInputChange}
               placeholder="Tu número de documento"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
               style={styles.input}
             />
           </div>

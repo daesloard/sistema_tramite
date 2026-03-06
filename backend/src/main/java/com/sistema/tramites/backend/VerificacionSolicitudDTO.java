@@ -1,5 +1,7 @@
 package com.sistema.tramites.backend;
 
+import jakarta.validation.constraints.Pattern;
+
 public class VerificacionSolicitudDTO {
 
     private Long tramiteId;
@@ -8,6 +10,7 @@ public class VerificacionSolicitudDTO {
     
     private String observaciones;
 
+    @Pattern(regexp = "^\\d*$", message = "El consecutivo solo debe contener digitos")
     private String consecutivo;
 
     private String username;

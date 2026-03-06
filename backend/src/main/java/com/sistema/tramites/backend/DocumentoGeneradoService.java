@@ -55,6 +55,10 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.GeneralSecurityException;
@@ -71,6 +75,7 @@ import java.text.Normalizer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -110,6 +115,10 @@ public class DocumentoGeneradoService {
     private final ResourceLoader resourceLoader;
     private final MeterRegistry meterRegistry;
     private final boolean usarLibreOffice;
+    private final boolean usarGotenberg;
+    private final String gotenbergUrl;
+    private final int gotenbergTimeoutSegundos;
+    private final boolean gotenbergFallbackHabilitado;
     private final boolean forzarFuenteMavenPro;
     private final boolean ajustarEspaciadoPlantillaPdf;
     private final boolean incluirDetalleFirmaEnPdf;
@@ -117,6 +126,7 @@ public class DocumentoGeneradoService {
     private final String certificadoP12Path;
     private final String certificadoP12Password;
     private final String certificadoP12Alias;
+    private final HttpClient gotenbergHttpClient;
     private volatile CertBundle certBundleCache;
     private volatile PhysicalFont fuenteMavenProCache;
     private volatile PhysicalFont fuenteMavenProBoldCache;
@@ -130,6 +140,10 @@ public class DocumentoGeneradoService {
     public DocumentoGeneradoService(ResourceLoader resourceLoader,
                                     MeterRegistry meterRegistry,
                                     @Value("${app.pdf.use-libreoffice:false}") boolean usarLibreOffice,
+                                    @Value("${app.pdf.gotenberg.enabled:false}") boolean usarGotenberg,
+                                    @Value("${app.pdf.gotenberg.url:}") String gotenbergUrl,
+                                    @Value("${app.pdf.gotenberg.timeout-seconds:25}") int gotenbergTimeoutSegundos,
+                                    @Value("${app.pdf.gotenberg.fallback-enabled:true}") boolean gotenbergFallbackHabilitado,
                                     @Value("${app.pdf.enforce-maven-pro-font:false}") boolean forzarFuenteMavenPro,
                                     @Value("${app.pdf.adjust-template-spacing:false}") boolean ajustarEspaciadoPlantillaPdf,
                                     @Value("${app.pdf.signature-annotation.enabled:false}") boolean incluirDetalleFirmaEnPdf,
@@ -140,6 +154,10 @@ public class DocumentoGeneradoService {
         this.resourceLoader = resourceLoader;
         this.meterRegistry = meterRegistry;
         this.usarLibreOffice = usarLibreOffice;
+        this.usarGotenberg = usarGotenberg;
+        this.gotenbergUrl = gotenbergUrl;
+        this.gotenbergTimeoutSegundos = gotenbergTimeoutSegundos;
+        this.gotenbergFallbackHabilitado = gotenbergFallbackHabilitado;
         this.forzarFuenteMavenPro = forzarFuenteMavenPro;
         this.ajustarEspaciadoPlantillaPdf = ajustarEspaciadoPlantillaPdf;
         this.incluirDetalleFirmaEnPdf = incluirDetalleFirmaEnPdf;
@@ -147,6 +165,9 @@ public class DocumentoGeneradoService {
         this.certificadoP12Path = certificadoP12Path;
         this.certificadoP12Password = certificadoP12Password;
         this.certificadoP12Alias = certificadoP12Alias;
+        this.gotenbergHttpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(Math.max(3, gotenbergTimeoutSegundos)))
+            .build();
     }
 
     public void generarYAdjuntarPdf(Tramite tramite, boolean aprobado, String observacion) {
@@ -159,12 +180,23 @@ public class DocumentoGeneradoService {
             PdfGeneracionResultado generacionResultado = generarPdfDocumentoConMetadatos(tramite, aprobado, observacion);
             engine = generacionResultado.engine();
 
-            byte[] pdfProtegido = protegerPdfContraEdicionYCopia(generacionResultado.contenidoPdf(), tramite);
-            byte[] pdfFirmado = firmarPdfDigitalmente(pdfProtegido, tramite);
+            byte[] pdfProtegido = ejecutarEtapaPdfConMetricas(
+                "protect",
+                engine,
+                tipo,
+                () -> protegerPdfContraEdicionYCopia(generacionResultado.contenidoPdf(), tramite)
+            );
+            byte[] pdfFirmado = ejecutarEtapaPdfConMetricas(
+                "sign",
+                engine,
+                tipo,
+                () -> firmarPdfDigitalmente(pdfProtegido, tramite)
+            );
 
             tramite.setContenidoPdfGenerado(pdfFirmado);
             tramite.setNombrePdfGenerado(generarNombrePdf(tramite, aprobado));
             tramite.setTipoContenidoPdfGenerado("application/pdf");
+            tramite.setMotorPdfGenerado(engine);
         } catch (Exception ex) {
             outcome = "error";
             Counter.builder("tramites.pdf.generation.errors")
@@ -200,6 +232,61 @@ public class DocumentoGeneradoService {
 
     private PdfGeneracionResultado generarPdfDocumentoConMetadatos(Tramite tramite, boolean aprobado, String observacion) {
         return generarPdfDesdePlantillaDocx(tramite, aprobado, observacion);
+    }
+
+    @FunctionalInterface
+    private interface EtapaPdfSupplier<T> {
+        T ejecutar() throws Exception;
+    }
+
+    private <T> T ejecutarEtapaPdfConMetricas(String stage,
+                                              String engine,
+                                              String tipo,
+                                              EtapaPdfSupplier<T> etapa) {
+        long inicioNanos = System.nanoTime();
+        String outcome = "success";
+        String engineTag = (engine == null || engine.isBlank()) ? "unknown" : engine;
+
+        try {
+            T resultado = etapa.ejecutar();
+            if (resultado == null) {
+                throw new IllegalStateException("La etapa PDF '" + stage + "' devolvió resultado nulo");
+            }
+            return resultado;
+        } catch (Exception ex) {
+            outcome = "error";
+            Counter.builder("tramites.pdf.stage.errors")
+                    .description("Errores por etapa en la generacion de PDF")
+                    .tag("stage", stage)
+                    .tag("engine", engineTag)
+                    .tag("tipo", tipo)
+                    .register(meterRegistry)
+                    .increment();
+
+            if (ex instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Fallo en la etapa PDF '" + stage + "'", ex);
+        } finally {
+            long duracionNanos = System.nanoTime() - inicioNanos;
+            Timer.builder("tramites.pdf.stage.duration")
+                    .description("Duracion por etapa en la generacion de PDF")
+                    .tag("stage", stage)
+                    .tag("engine", engineTag)
+                    .tag("outcome", outcome)
+                    .tag("tipo", tipo)
+                    .register(meterRegistry)
+                    .record(duracionNanos, TimeUnit.NANOSECONDS);
+
+            Counter.builder("tramites.pdf.stage.total")
+                    .description("Total de ejecuciones por etapa en la generacion de PDF")
+                    .tag("stage", stage)
+                    .tag("engine", engineTag)
+                    .tag("outcome", outcome)
+                    .tag("tipo", tipo)
+                    .register(meterRegistry)
+                    .increment();
+        }
     }
 
     public String generarTextoDocumento(Tramite tramite, boolean aprobado, String observacion) {
@@ -680,7 +767,8 @@ public class DocumentoGeneradoService {
             if (ajustarEspaciadoPlantillaPdf) {
                 preservarEspaciadoPlantillaParaPdf(wordDoc);
             }
-            return convertirDocxConPlantillaAPdf(wordDoc);
+            String tipo = aprobado ? "aprobado" : "rechazado";
+            return convertirDocxConPlantillaAPdf(wordDoc, tipo);
         } catch (IOException e) {
             throw new IllegalStateException("No fue posible generar PDF desde plantilla DOCX", e);
         }
@@ -1489,21 +1577,71 @@ public class DocumentoGeneradoService {
         }
     }
 
-    private PdfGeneracionResultado convertirDocxConPlantillaAPdf(XWPFDocument wordDoc) {
+    private PdfGeneracionResultado convertirDocxConPlantillaAPdf(XWPFDocument wordDoc, String tipo) {
         try {
             ByteArrayOutputStream docxBytes = new ByteArrayOutputStream();
             wordDoc.write(docxBytes);
 
             byte[] docxContenido = docxBytes.toByteArray();
-            if (usarLibreOffice) {
-                byte[] pdfLibreOffice = convertirDocxConLibreOffice(docxContenido);
-                if (pdfLibreOffice != null && pdfLibreOffice.length > 0) {
-                    return new PdfGeneracionResultado(pdfLibreOffice, "libreoffice");
+            Exception ultimoError = null;
+
+            if (usarGotenberg) {
+                if (!gotenbergDisponible()) {
+                    String mensaje = "Gotenberg está habilitado pero app.pdf.gotenberg.url no está configurado";
+                    if (!gotenbergFallbackHabilitado) {
+                        throw new IllegalStateException(mensaje);
+                    }
+                    logger.warn("{}. Se usará motor local como respaldo.", mensaje);
+                } else {
+                    try {
+                        byte[] pdfGotenberg = ejecutarEtapaPdfConMetricas(
+                                "convert",
+                                "gotenberg",
+                                tipo,
+                                () -> convertirDocxConGotenberg(docxContenido)
+                        );
+                        return new PdfGeneracionResultado(pdfGotenberg, "gotenberg");
+                    } catch (Exception ex) {
+                        ultimoError = ex;
+                        if (!gotenbergFallbackHabilitado) {
+                            throw ex;
+                        }
+                        logger.warn("Gotenberg no pudo convertir DOCX a PDF. Se usará motor local como respaldo: {}", ex.getMessage());
+                    }
                 }
-                logger.warn("LibreOffice está habilitado pero no pudo convertir; se usará docx4j como respaldo.");
             }
 
-            return new PdfGeneracionResultado(convertirDocxConDocx4j(docxContenido), "docx4j");
+            if (usarLibreOffice) {
+                try {
+                    byte[] pdfLibreOffice = ejecutarEtapaPdfConMetricas(
+                            "convert",
+                            "libreoffice",
+                            tipo,
+                            () -> convertirDocxConLibreOffice(docxContenido)
+                    );
+                    if (pdfLibreOffice != null && pdfLibreOffice.length > 0) {
+                        return new PdfGeneracionResultado(pdfLibreOffice, "libreoffice");
+                    }
+                } catch (Exception ex) {
+                    ultimoError = ex;
+                    logger.warn("LibreOffice está habilitado pero no pudo convertir; se usará docx4j como respaldo: {}", ex.getMessage());
+                }
+            }
+
+            try {
+                byte[] pdfDocx4j = ejecutarEtapaPdfConMetricas(
+                        "convert",
+                        "docx4j",
+                        tipo,
+                        () -> convertirDocxConDocx4j(docxContenido)
+                );
+                return new PdfGeneracionResultado(pdfDocx4j, "docx4j");
+            } catch (Exception ex) {
+                if (ultimoError != null && ultimoError != ex) {
+                    ex.addSuppressed(ultimoError);
+                }
+                throw ex;
+            }
         } catch (IOException e) {
             throw new IllegalStateException("No fue posible convertir la plantilla DOCX a PDF", e);
         }
@@ -1713,6 +1851,65 @@ public class DocumentoGeneradoService {
         } finally {
             eliminarDirectorioTemporal(dirTemporal);
         }
+    }
+
+    private boolean gotenbergDisponible() {
+        return gotenbergUrl != null && !gotenbergUrl.isBlank();
+    }
+
+    private byte[] convertirDocxConGotenberg(byte[] docxContenido) {
+        if (!gotenbergDisponible()) {
+            throw new IllegalStateException("URL de Gotenberg no configurada");
+        }
+
+        String boundary = "----tramitesBoundary" + System.nanoTime();
+
+        try {
+            byte[] payload = construirPayloadMultipartGotenberg(boundary, docxContenido);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(gotenbergUrl))
+                    .timeout(Duration.ofSeconds(Math.max(3, gotenbergTimeoutSegundos)))
+                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(payload))
+                    .build();
+
+            HttpResponse<byte[]> response = gotenbergHttpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            int status = response.statusCode();
+            if (status < 200 || status >= 300) {
+                String detalle = response.body() == null
+                        ? "sin detalle"
+                        : new String(response.body(), StandardCharsets.UTF_8);
+                throw new IllegalStateException("Gotenberg devolvió HTTP " + status + ": " + detalle);
+            }
+
+            byte[] pdf = response.body();
+            if (pdf == null || pdf.length == 0) {
+                throw new IllegalStateException("Gotenberg devolvió un PDF vacío");
+            }
+            return pdf;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Conversión con Gotenberg interrumpida", ex);
+        } catch (IOException ex) {
+            throw new IllegalStateException("No fue posible convertir DOCX a PDF con Gotenberg", ex);
+        }
+    }
+
+    private byte[] construirPayloadMultipartGotenberg(String boundary, byte[] docxContenido) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        String separador = "\r\n";
+
+        output.write(("--" + boundary + separador).getBytes(StandardCharsets.UTF_8));
+        output.write(("Content-Disposition: form-data; name=\"files\"; filename=\"certificado.docx\"" + separador)
+                .getBytes(StandardCharsets.UTF_8));
+        output.write(("Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                + separador + separador).getBytes(StandardCharsets.UTF_8));
+        output.write(docxContenido);
+        output.write(separador.getBytes(StandardCharsets.UTF_8));
+
+        output.write(("--" + boundary + "--" + separador).getBytes(StandardCharsets.UTF_8));
+        return output.toByteArray();
     }
 
     private String resolverEjecutableSoffice() {
