@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { API_TRAMITES_URL } from '../config/api';
+import { listarTramites } from '../services/api';
 import { formatearFechaHora as formatearFechaHoraUtil } from '../utils/dateFormat';
 import { buildUsernameHeader, getStoredUser } from '../utils/userSession';
 import { filtrarCertificadosGenerados } from '../utils/certificateFilters';
@@ -14,8 +15,12 @@ const FILTROS = [
 
 const styles = getPanelAlcaldeStyles();
 
-const getEstadoBadge = (estado) => {
-  if (estado === 'EN_FIRMA') return '🔖 Para Firmar';
+const getEstadoBadge = (solicitud) => {
+  const estado = solicitud?.estado;
+  if (estado === 'EN_FIRMA') {
+    if (solicitud?.verificacionAprobada === false) return '🔖 Para Firmar (Negada)';
+    return '🔖 Para Firmar (Aprobada)';
+  }
   if (estado === 'FINALIZADO') return '✅ Aprobada';
   return '❌ Negada';
 };
@@ -96,11 +101,9 @@ export default function PanelAlcalde() {
 
   const esPendienteFirma = selectedSolicitud?.estado === 'EN_FIRMA';
 
-  const cargarSolicitudes = async () => {
+  const cargarSolicitudes = async ({ forceRefresh = false } = {}) => {
     try {
-      const response = await fetch(API_TRAMITES_URL);
-      if (!response.ok) throw new Error('Error al cargar solicitudes');
-      const data = await response.json();
+      const data = await listarTramites({ forceRefresh });
       setSolicitudes(data.sort((a, b) => new Date(a.fechaRadicacion) - new Date(b.fechaRadicacion)));
       setError('');
     } catch (err) {
@@ -156,7 +159,7 @@ export default function PanelAlcalde() {
       mostrarAvisoPanel('success', 'Certificado firmado exitosamente. El PDF se está preparando y se enviará al solicitante en breve.');
       setSelectedSolicitud(null);
       setFirmaDigital('');
-      await cargarSolicitudes();
+      await cargarSolicitudes({ forceRefresh: true });
     } catch (err) {
       mostrarAvisoPanel('error', `Error: ${err.message}`);
     } finally {
@@ -170,7 +173,7 @@ export default function PanelAlcalde() {
     <div style={styles.contenedor}>
       <div style={styles.encabezado}>
         <h2 style={styles.h2}>👨‍⚖️ Panel del Alcalde</h2>
-        <p style={styles.subtitulo}>Firma los certificados de residencia aprobados</p>
+        <p style={styles.subtitulo}>Firma los certificados de residencia aprobados o negados por verificador</p>
         <div style={styles.filtros}>
           {FILTROS.map((filtro) => (
             <button
@@ -283,7 +286,7 @@ export default function PanelAlcalde() {
                 >
                   <div style={styles.fila}>
                     <span style={styles.radicado}>{solicitud.numeroRadicado}</span>
-                    <span style={styles.badge}>{getEstadoBadge(solicitud.estado)}</span>
+                    <span style={styles.badge}>{getEstadoBadge(solicitud)}</span>
                   </div>
                   <p style={styles.itemP}>
                     <strong style={styles.itemStrong}>{solicitud.nombreSolicitante}</strong>

@@ -8,6 +8,9 @@ import com.lowagie.text.Paragraph;
 import com.lowagie.text.pdf.PdfReader;
 import com.lowagie.text.pdf.PdfStamper;
 import com.lowagie.text.pdf.PdfWriter;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.docx4j.convert.out.pdf.PdfConversion;
 import org.docx4j.convert.out.pdf.viaXSLFO.Conversion;
 import org.docx4j.convert.out.pdf.viaXSLFO.PdfSettings;
@@ -21,6 +24,7 @@ import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFFooter;
 import org.apache.poi.xwpf.usermodel.XWPFHeader;
+import org.apache.poi.xwpf.usermodel.IBodyElement;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
 import org.apache.poi.xwpf.usermodel.XWPFTable;
@@ -29,6 +33,7 @@ import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.apache.poi.util.Units;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTBookmark;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTHyperlink;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSpacing;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
@@ -68,6 +73,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Date;
@@ -77,6 +83,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class DocumentoGeneradoService {
@@ -91,12 +99,20 @@ public class DocumentoGeneradoService {
     private static final String MARCADOR_FIRMA_GUILLEMET = "«firma.jpeg»";
     private static final int FIRMA_ANCHO_PX = 220;
     private static final int FIRMA_ALTO_PX = 80;
+    private static final int RECORTE_FIRMA_ANTES = 5;
+    private static final int RECORTE_FIRMA_DESPUES = 4;
+    private static final int RECORTE_PARRAFOS_VACIOS_ANTES = 4;
+    private static final int RECORTE_PARRAFOS_VACIOS_DESPUES = 2;
     private static final String FUENTE_MAVEN_PRO = "Maven Pro";
     private static final String FUENTE_MAVEN_PRO_ALIAS = "MavenPro";
     private static final String RECURSO_MAVEN_PRO_TTF = "classpath:fonts/MavenPro[wght].ttf";
 
     private final ResourceLoader resourceLoader;
+    private final MeterRegistry meterRegistry;
     private final boolean usarLibreOffice;
+    private final boolean forzarFuenteMavenPro;
+    private final boolean ajustarEspaciadoPlantillaPdf;
+    private final boolean incluirDetalleFirmaEnPdf;
     private final boolean firmaDigitalHabilitada;
     private final String certificadoP12Path;
     private final String certificadoP12Password;
@@ -112,13 +128,21 @@ public class DocumentoGeneradoService {
     }
 
     public DocumentoGeneradoService(ResourceLoader resourceLoader,
+                                    MeterRegistry meterRegistry,
                                     @Value("${app.pdf.use-libreoffice:false}") boolean usarLibreOffice,
+                                    @Value("${app.pdf.enforce-maven-pro-font:false}") boolean forzarFuenteMavenPro,
+                                    @Value("${app.pdf.adjust-template-spacing:false}") boolean ajustarEspaciadoPlantillaPdf,
+                                    @Value("${app.pdf.signature-annotation.enabled:false}") boolean incluirDetalleFirmaEnPdf,
                                     @Value("${app.pdf.digital-sign.enabled:true}") boolean firmaDigitalHabilitada,
                                     @Value("${app.pdf.digital-sign.p12-path:}") String certificadoP12Path,
                                     @Value("${app.pdf.digital-sign.p12-password:}") String certificadoP12Password,
                                     @Value("${app.pdf.digital-sign.p12-alias:}") String certificadoP12Alias) {
         this.resourceLoader = resourceLoader;
+        this.meterRegistry = meterRegistry;
         this.usarLibreOffice = usarLibreOffice;
+        this.forzarFuenteMavenPro = forzarFuenteMavenPro;
+        this.ajustarEspaciadoPlantillaPdf = ajustarEspaciadoPlantillaPdf;
+        this.incluirDetalleFirmaEnPdf = incluirDetalleFirmaEnPdf;
         this.firmaDigitalHabilitada = firmaDigitalHabilitada;
         this.certificadoP12Path = certificadoP12Path;
         this.certificadoP12Password = certificadoP12Password;
@@ -126,16 +150,55 @@ public class DocumentoGeneradoService {
     }
 
     public void generarYAdjuntarPdf(Tramite tramite, boolean aprobado, String observacion) {
-        byte[] pdfBytes = generarPdfDocumento(tramite, aprobado, observacion);
-        byte[] pdfProtegido = protegerPdfContraEdicionYCopia(pdfBytes, tramite);
-        byte[] pdfFirmado = firmarPdfDigitalmente(pdfProtegido, tramite);
+        long inicioNanos = System.nanoTime();
+        String tipo = aprobado ? "aprobado" : "rechazado";
+        String engine = "unknown";
+        String outcome = "success";
 
-        tramite.setContenidoPdfGenerado(pdfFirmado);
-        tramite.setNombrePdfGenerado(generarNombrePdf(tramite, aprobado));
-        tramite.setTipoContenidoPdfGenerado("application/pdf");
+        try {
+            PdfGeneracionResultado generacionResultado = generarPdfDocumentoConMetadatos(tramite, aprobado, observacion);
+            engine = generacionResultado.engine();
+
+            byte[] pdfProtegido = protegerPdfContraEdicionYCopia(generacionResultado.contenidoPdf(), tramite);
+            byte[] pdfFirmado = firmarPdfDigitalmente(pdfProtegido, tramite);
+
+            tramite.setContenidoPdfGenerado(pdfFirmado);
+            tramite.setNombrePdfGenerado(generarNombrePdf(tramite, aprobado));
+            tramite.setTipoContenidoPdfGenerado("application/pdf");
+        } catch (Exception ex) {
+            outcome = "error";
+            Counter.builder("tramites.pdf.generation.errors")
+                    .description("Errores en la generacion de PDF")
+                    .tag("engine", engine)
+                    .tag("tipo", tipo)
+                    .register(meterRegistry)
+                    .increment();
+            throw ex;
+        } finally {
+            long duracionNanos = System.nanoTime() - inicioNanos;
+            Timer.builder("tramites.pdf.generation.duration")
+                    .description("Duracion de generacion de PDF")
+                    .tag("engine", engine)
+                    .tag("outcome", outcome)
+                    .tag("tipo", tipo)
+                    .register(meterRegistry)
+                    .record(duracionNanos, TimeUnit.NANOSECONDS);
+
+            Counter.builder("tramites.pdf.generation.total")
+                    .description("Total de ejecuciones de generacion de PDF")
+                    .tag("engine", engine)
+                    .tag("outcome", outcome)
+                    .tag("tipo", tipo)
+                    .register(meterRegistry)
+                    .increment();
+        }
     }
 
     public byte[] generarPdfDocumento(Tramite tramite, boolean aprobado, String observacion) {
+        return generarPdfDocumentoConMetadatos(tramite, aprobado, observacion).contenidoPdf();
+    }
+
+    private PdfGeneracionResultado generarPdfDocumentoConMetadatos(Tramite tramite, boolean aprobado, String observacion) {
         return generarPdfDesdePlantillaDocx(tramite, aprobado, observacion);
     }
 
@@ -353,6 +416,16 @@ public class DocumentoGeneradoService {
     }
 
     private String reemplazarMarcadores(String contenido, Tramite tramite, String observacion) {
+        String resultado = contenido;
+        List<MarcadorRegex> marcadores = construirMarcadoresRegex(tramite, observacion);
+        for (MarcadorRegex marcador : marcadores) {
+            resultado = reemplazarRegex(resultado, marcador.regex(), marcador.valor());
+        }
+
+        return resultado;
+    }
+
+    private List<MarcadorRegex> construirMarcadoresRegex(Tramite tramite, String observacion) {
         LocalDateTime fechaBase = tramite.getFechaFirmaAlcalde() != null
                 ? tramite.getFechaFirmaAlcalde()
                 : LocalDateTime.now();
@@ -360,28 +433,29 @@ public class DocumentoGeneradoService {
         int dia = fechaBase.getDayOfMonth();
         int anio = fechaBase.getYear();
         String mes = fechaBase.getMonth().getDisplayName(TextStyle.FULL, LOCALE_ES);
+        String fechaFirmaTexto = fechaBase.format(DateTimeFormatter.ofPattern("dd/MM/yyyy", LOCALE_ES));
 
-        String resultado = contenido;
-        resultado = reemplazarRegex(resultado, "«\\s*nombre\\s*s\\s*olicitante\\s*»|«\\s*nombre_colicitante\\s*»", valorMayusculas(tramite.getNombreSolicitante()));
-        resultado = reemplazarRegex(resultado, "«\\s*numero\\s*d\\s*ocumento\\s*»|«\\s*numero_documento\\s*»", valor(tramite.getNumeroDocumento()));
-        resultado = reemplazarRegex(resultado, "«\\s*lugarExpedicionDocumento\\s*»|«\\s*lugar_expedicion_documento\\s*»", valor(tramite.getLugarExpedicionDocumento()));
-        resultado = reemplazarRegex(resultado, "«\\s*direccionResidencia\\s*»", valorDireccionCertificado(tramite.getDireccionResidencia()));
-        resultado = reemplazarRegex(resultado, "«\\s*diasLetras\\s*»", numeroALetras(dia));
-        resultado = reemplazarRegex(resultado, "«\\s*dias\\s*»", String.valueOf(dia));
-        resultado = reemplazarRegex(resultado, "«\\s*mesLetras\\s*»", capitalizar(mes));
-        resultado = reemplazarRegex(resultado, "«\\s*añoLetra\\s*»", numeroALetras(anio));
-        resultado = reemplazarRegex(resultado, "«\\s*año\\s*»", String.valueOf(anio));
-        resultado = reemplazarRegex(resultado, "«\\s*alcalde\\s*»", nombreAlcaldePlantilla(tramite));
-        resultado = reemplazarRegex(resultado, "«\\s*verificador\\s*»", nombreVerificadorPlantilla(tramite));
-        resultado = reemplazarRegex(resultado, "«\\s*tipo_documento\\s*»", valor(tramite.getTipoDocumento()));
-        resultado = reemplazarRegex(resultado, "«\\s*observacion\\s*»", valor(observacion));
-        resultado = reemplazarRegex(resultado, "«\\s*consecutivo\\s*»|«\\s*consecutivo_verificador\\s*»", valor(tramite.getConsecutivoVerificador()));
-        resultado = reemplazarRegex(resultado, "«\\s*numeroRadicado\\s*»|«\\s*numeroRadico\\s*»|«\\s*numero_radicado\\s*»|«\\s*radicado\\s*»", valor(tramite.getNumeroRadicado()));
-        resultado = reemplazarRegex(resultado, "«\\s*codigo_verificacion\\s*»|«\\s*codigoVerificacion\\s*»", valor(tramite.getCodigoVerificacion()));
-        resultado = reemplazarRegex(resultado, "«\\s*hash_documento\\s*»|«\\s*hashDocumento\\s*»|«\\s*hash_firma\\s*»", generarHashVisibleFirma(tramite));
-        resultado = reemplazarRegex(resultado, "«\\s*leyenda_firma_digital\\s*»|«\\s*firma_digital_leyenda\\s*»", generarLeyendaFirmaDigital(tramite));
-
-        return resultado;
+        return List.of(
+                new MarcadorRegex("«\\s*nombre\\s*s\\s*olicitante\\s*»|«\\s*nombre_colicitante\\s*»", valorMayusculas(tramite.getNombreSolicitante())),
+                new MarcadorRegex("«\\s*numero\\s*d\\s*ocumento\\s*»|«\\s*numero_documento\\s*»", valor(tramite.getNumeroDocumento())),
+                new MarcadorRegex("«\\s*lugarExpedicionDocumento\\s*»|«\\s*lugar_expedicion_documento\\s*»", valor(tramite.getLugarExpedicionDocumento())),
+                new MarcadorRegex("«\\s*direccionResidencia\\s*»", valorDireccionCertificado(tramite.getDireccionResidencia())),
+                new MarcadorRegex("«\\s*diasLetras\\s*»", numeroALetras(dia)),
+                new MarcadorRegex("«\\s*dias\\s*»", String.valueOf(dia)),
+                new MarcadorRegex("«\\s*mesLetras\\s*»", capitalizar(mes)),
+                new MarcadorRegex("«\\s*añoLetra\\s*»", numeroALetras(anio)),
+                new MarcadorRegex("«\\s*año\\s*»", String.valueOf(anio)),
+                new MarcadorRegex("«\\s*alcalde\\s*»", nombreAlcaldePlantilla(tramite)),
+                new MarcadorRegex("«\\s*verificador\\s*»", nombreVerificadorPlantilla(tramite)),
+                new MarcadorRegex("«\\s*tipo_documento\\s*»|«\\s*tipoDocumento\\s*»|<<\\s*tipo_documento\\s*>>|<<\\s*tipoDocumento\\s*>>", valor(tramite.getTipoDocumento())),
+                new MarcadorRegex("«\\s*fechaFrima\\s*»|«\\s*fechaFirma\\s*»|<<\\s*fechaFrima\\s*>>|<<\\s*fechaFirma\\s*>>", fechaFirmaTexto),
+                new MarcadorRegex("«\\s*observacion\\s*»", valor(observacion)),
+                new MarcadorRegex("«\\s*consecutivo\\s*»|«\\s*consecutivo_verificador\\s*»", valor(tramite.getConsecutivoVerificador())),
+                new MarcadorRegex("«\\s*numeroRadicado\\s*»|«\\s*numeroRadico\\s*»|«\\s*numero_radicado\\s*»|«\\s*radicado\\s*»", valor(tramite.getNumeroRadicado())),
+                new MarcadorRegex("«\\s*codigo_verificacion\\s*»|«\\s*codigoVerificacion\\s*»", valor(tramite.getCodigoVerificacion())),
+                new MarcadorRegex("«\\s*hash_documento\\s*»|«\\s*hashDocumento\\s*»|«\\s*hash_firma\\s*»", generarHashVisibleFirma(tramite)),
+                new MarcadorRegex("«\\s*leyenda_firma_digital\\s*»|«\\s*firma_digital_leyenda\\s*»", generarLeyendaFirmaDigital(tramite))
+        );
     }
 
     private String valorDireccionCertificado(String direccionResidencia) {
@@ -590,7 +664,7 @@ public class DocumentoGeneradoService {
     private record CertBundle(PrivateKey privateKey, Certificate[] chain) {
     }
 
-    private byte[] generarPdfDesdePlantillaDocx(Tramite tramite, boolean aprobado, String observacion) {
+    private PdfGeneracionResultado generarPdfDesdePlantillaDocx(Tramite tramite, boolean aprobado, String observacion) {
         String nombrePlantilla = obtenerNombrePlantilla(tramite, aprobado);
         Resource resource = resourceLoader.getResource("classpath:templates/" + nombrePlantilla);
 
@@ -599,9 +673,13 @@ public class DocumentoGeneradoService {
 
             reemplazarMarcadoresEnDocumento(wordDoc, tramite, observacion);
             insertarFirmaEnDocumento(wordDoc, tramite);
-            aplicarFuenteMavenPro(wordDoc);
+            if (forzarFuenteMavenPro) {
+                aplicarFuenteMavenPro(wordDoc);
+            }
             normalizarIdsInternosParaPdf(wordDoc);
-            preservarEspaciadoPlantillaParaPdf(wordDoc);
+            if (ajustarEspaciadoPlantillaPdf) {
+                preservarEspaciadoPlantillaParaPdf(wordDoc);
+            }
             return convertirDocxConPlantillaAPdf(wordDoc);
         } catch (IOException e) {
             throw new IllegalStateException("No fue posible generar PDF desde plantilla DOCX", e);
@@ -613,52 +691,59 @@ public class DocumentoGeneradoService {
             return;
         }
 
+        boolean mavenProBoldDisponible = resolverFuenteMavenProBold() != null;
+
         for (XWPFParagraph paragraph : document.getParagraphs()) {
-            aplicarFuenteMavenProEnParrafo(paragraph);
+            aplicarFuenteMavenProEnParrafo(paragraph, mavenProBoldDisponible);
         }
 
         for (XWPFTable table : document.getTables()) {
-            aplicarFuenteMavenProEnTabla(table);
+            aplicarFuenteMavenProEnTabla(table, mavenProBoldDisponible);
         }
 
         for (XWPFHeader header : document.getHeaderList()) {
             for (XWPFParagraph paragraph : header.getParagraphs()) {
-                aplicarFuenteMavenProEnParrafo(paragraph);
+                aplicarFuenteMavenProEnParrafo(paragraph, mavenProBoldDisponible);
             }
             for (XWPFTable table : header.getTables()) {
-                aplicarFuenteMavenProEnTabla(table);
+                aplicarFuenteMavenProEnTabla(table, mavenProBoldDisponible);
             }
         }
 
         for (XWPFFooter footer : document.getFooterList()) {
             for (XWPFParagraph paragraph : footer.getParagraphs()) {
-                aplicarFuenteMavenProEnParrafo(paragraph);
+                aplicarFuenteMavenProEnParrafo(paragraph, mavenProBoldDisponible);
             }
             for (XWPFTable table : footer.getTables()) {
-                aplicarFuenteMavenProEnTabla(table);
+                aplicarFuenteMavenProEnTabla(table, mavenProBoldDisponible);
             }
         }
     }
 
-    private void aplicarFuenteMavenProEnTabla(XWPFTable table) {
+    private void aplicarFuenteMavenProEnTabla(XWPFTable table, boolean mavenProBoldDisponible) {
         for (XWPFTableRow row : table.getRows()) {
             for (XWPFTableCell cell : row.getTableCells()) {
                 for (XWPFParagraph paragraph : cell.getParagraphs()) {
-                    aplicarFuenteMavenProEnParrafo(paragraph);
+                    aplicarFuenteMavenProEnParrafo(paragraph, mavenProBoldDisponible);
                 }
                 for (XWPFTable nested : cell.getTables()) {
-                    aplicarFuenteMavenProEnTabla(nested);
+                    aplicarFuenteMavenProEnTabla(nested, mavenProBoldDisponible);
                 }
             }
         }
     }
 
-    private void aplicarFuenteMavenProEnParrafo(XWPFParagraph paragraph) {
+    private void aplicarFuenteMavenProEnParrafo(XWPFParagraph paragraph, boolean mavenProBoldDisponible) {
         if (paragraph == null || paragraph.getRuns() == null) {
             return;
         }
         for (XWPFRun run : paragraph.getRuns()) {
             if (run != null) {
+                // Si no hay variante bold real de Maven Pro, no forzamos la fuente en runs
+                // en negrita para preservar el peso visual definido en la plantilla.
+                if (run.isBold() && !mavenProBoldDisponible) {
+                    continue;
+                }
                 run.setFontFamily(FUENTE_MAVEN_PRO);
             }
         }
@@ -801,112 +886,254 @@ public class DocumentoGeneradoService {
     }
 
     private void reemplazarMarcadoresEnDocumento(XWPFDocument document, Tramite tramite, String observacion) {
+        List<MarcadorRegex> marcadores = construirMarcadoresRegex(tramite, observacion);
+
         for (XWPFParagraph paragraph : document.getParagraphs()) {
-            reemplazarMarcadoresParrafo(paragraph, tramite, observacion);
+            reemplazarMarcadoresParrafo(paragraph, marcadores);
         }
 
         for (XWPFTable table : document.getTables()) {
-            reemplazarMarcadoresTabla(table, tramite, observacion);
+            reemplazarMarcadoresTabla(table, marcadores);
         }
 
         for (XWPFHeader header : document.getHeaderList()) {
             for (XWPFParagraph paragraph : header.getParagraphs()) {
-                reemplazarMarcadoresParrafo(paragraph, tramite, observacion);
+                reemplazarMarcadoresParrafo(paragraph, marcadores);
             }
             for (XWPFTable table : header.getTables()) {
-                reemplazarMarcadoresTabla(table, tramite, observacion);
+                reemplazarMarcadoresTabla(table, marcadores);
             }
         }
 
         for (XWPFFooter footer : document.getFooterList()) {
             for (XWPFParagraph paragraph : footer.getParagraphs()) {
-                reemplazarMarcadoresParrafo(paragraph, tramite, observacion);
+                reemplazarMarcadoresParrafo(paragraph, marcadores);
             }
             for (XWPFTable table : footer.getTables()) {
-                reemplazarMarcadoresTabla(table, tramite, observacion);
+                reemplazarMarcadoresTabla(table, marcadores);
             }
         }
     }
 
-    private void reemplazarMarcadoresTabla(XWPFTable table, Tramite tramite, String observacion) {
+    private void reemplazarMarcadoresTabla(XWPFTable table, List<MarcadorRegex> marcadores) {
         for (XWPFTableRow row : table.getRows()) {
             for (XWPFTableCell cell : row.getTableCells()) {
                 for (XWPFParagraph paragraph : cell.getParagraphs()) {
-                    reemplazarMarcadoresParrafo(paragraph, tramite, observacion);
+                    reemplazarMarcadoresParrafo(paragraph, marcadores);
                 }
                 for (XWPFTable nested : cell.getTables()) {
-                    reemplazarMarcadoresTabla(nested, tramite, observacion);
+                    reemplazarMarcadoresTabla(nested, marcadores);
                 }
             }
         }
     }
 
-    private void reemplazarMarcadoresParrafo(XWPFParagraph paragraph, Tramite tramite, String observacion) {
-        if (paragraph.getRuns() == null || paragraph.getRuns().isEmpty()) {
+    private void reemplazarMarcadoresParrafo(XWPFParagraph paragraph, List<MarcadorRegex> marcadores) {
+        if (paragraph == null || paragraph.getRuns() == null || paragraph.getRuns().isEmpty()) {
             return;
         }
 
-        boolean reemplazoDirectoPorRun = false;
-        for (XWPFRun run : paragraph.getRuns()) {
-            String textoRun = run.getText(0);
-            if (textoRun == null || textoRun.isEmpty()) {
-                continue;
+        for (MarcadorRegex marcador : marcadores) {
+            reemplazarMarcadorRegexEnParrafo(paragraph, marcador);
+        }
+    }
+
+    private void reemplazarMarcadorRegexEnParrafo(XWPFParagraph paragraph, MarcadorRegex marcador) {
+        if (paragraph == null || marcador == null) {
+            return;
+        }
+
+        Pattern pattern = Pattern.compile(marcador.regex(), Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+        int guard = 0;
+
+        while (true) {
+            guard++;
+            if (guard > 256) {
+                logger.warn("Se alcanzó el límite de reemplazos para marcador regex en un párrafo: {}", marcador.regex());
+                return;
             }
 
-            String reemplazadoRun = reemplazarMarcadores(textoRun, tramite, observacion);
-            if (!textoRun.equals(reemplazadoRun)) {
-                run.setText(reemplazadoRun, 0);
-                reemplazoDirectoPorRun = true;
+            List<XWPFRun> runs = paragraph.getRuns();
+            if (runs == null || runs.isEmpty()) {
+                return;
             }
-        }
 
-        if (reemplazoDirectoPorRun) {
-            return;
-        }
-
-        StringBuilder textoParrafo = new StringBuilder();
-        List<Integer> longitudesOriginales = new ArrayList<>();
-
-        for (XWPFRun run : paragraph.getRuns()) {
-            String textoRun = run.getText(0);
-            if (textoRun == null) {
-                textoRun = "";
+            String textoParrafo = concatenarTextoRuns(runs);
+            if (textoParrafo.isEmpty()) {
+                return;
             }
-            textoParrafo.append(textoRun);
-            longitudesOriginales.add(textoRun.length());
+
+            Matcher matcher = pattern.matcher(textoParrafo);
+            if (!matcher.find()) {
+                return;
+            }
+
+            if (matcher.group().equals(marcador.valor())) {
+                return;
+            }
+
+            aplicarReemplazoEnRangoDeRuns(paragraph, runs, matcher.start(), matcher.end(), marcador.valor());
         }
+    }
 
-        if (textoParrafo.isEmpty()) {
-            return;
+    private String concatenarTextoRuns(List<XWPFRun> runs) {
+        StringBuilder texto = new StringBuilder();
+        for (XWPFRun run : runs) {
+            texto.append(obtenerTextoRun(run));
         }
+        return texto.toString();
+    }
 
-        String original = textoParrafo.toString();
-        String reemplazado = reemplazarMarcadores(original, tramite, observacion);
+    private void aplicarReemplazoEnRangoDeRuns(XWPFParagraph paragraph, List<XWPFRun> runs, int inicio, int fin, String reemplazo) {
+        int indiceRunInicio = -1;
+        int indiceRunFin = -1;
+        int offsetInicio = 0;
+        int offsetFin = 0;
+        int cursor = 0;
 
-        if (original.equals(reemplazado)) {
-            return;
-        }
-
-        int indice = 0;
-        List<XWPFRun> runs = paragraph.getRuns();
         for (int i = 0; i < runs.size(); i++) {
-            XWPFRun run = runs.get(i);
-            int longitudOriginal = longitudesOriginales.get(i);
-            String segmento;
+            String textoRun = obtenerTextoRun(runs.get(i));
+            int longitud = textoRun.length();
+            int limite = cursor + longitud;
 
-            if (i == runs.size() - 1) {
-                segmento = indice < reemplazado.length() ? reemplazado.substring(indice) : "";
-            } else {
-                int fin = Math.min(indice + longitudOriginal, reemplazado.length());
-                segmento = reemplazado.substring(indice, fin);
-                indice = fin;
+            if (indiceRunInicio == -1 && inicio < limite) {
+                indiceRunInicio = i;
+                offsetInicio = Math.max(0, inicio - cursor);
             }
 
-            run.setText(segmento, 0);
+            if (indiceRunInicio != -1 && fin <= limite) {
+                indiceRunFin = i;
+                offsetFin = Math.max(0, fin - cursor);
+                break;
+            }
+
+            cursor = limite;
         }
+
+        if (indiceRunInicio == -1 || indiceRunFin == -1) {
+            return;
+        }
+
+        int indiceRunEstilo = seleccionarRunEstilo(runs, inicio, fin, indiceRunInicio);
+
+        XWPFRun runInicio = runs.get(indiceRunInicio);
+        XWPFRun runFin = runs.get(indiceRunFin);
+        XWPFRun runEstilo = runs.get(indiceRunEstilo);
+        String textoInicio = obtenerTextoRun(runInicio);
+        String textoFin = obtenerTextoRun(runFin);
+
+        String prefijo = textoInicio.substring(0, Math.min(offsetInicio, textoInicio.length()));
+        String sufijo = textoFin.substring(Math.min(offsetFin, textoFin.length()));
+
+        if (indiceRunInicio == indiceRunFin) {
+            runInicio.setText(prefijo, 0);
+
+            XWPFRun runReemplazo = paragraph.insertNewRun(indiceRunInicio + 1);
+            copiarFormatoRun(runEstilo, runReemplazo);
+            runReemplazo.setText(reemplazo, 0);
+
+            if (!sufijo.isEmpty()) {
+                XWPFRun runSufijo = paragraph.insertNewRun(indiceRunInicio + 2);
+                copiarFormatoRun(runFin, runSufijo);
+                runSufijo.setText(sufijo, 0);
+            }
+            return;
+        }
+
+        runInicio.setText(prefijo, 0);
+
+        for (int i = indiceRunInicio + 1; i < indiceRunFin; i++) {
+            runs.get(i).setText("", 0);
+        }
+
+        runFin.setText(sufijo, 0);
+
+        XWPFRun runReemplazo = paragraph.insertNewRun(indiceRunInicio + 1);
+        copiarFormatoRun(runEstilo, runReemplazo);
+        runReemplazo.setText(reemplazo, 0);
+    }
+
+    private int seleccionarRunEstilo(List<XWPFRun> runs, int inicio, int fin, int indiceDefecto) {
+        int mejorIndice = indiceDefecto;
+        int mejorCobertura = -1;
+        int cursor = 0;
+
+        for (int i = 0; i < runs.size(); i++) {
+            String textoRun = obtenerTextoRun(runs.get(i));
+            int longitud = textoRun.length();
+            int runInicio = cursor;
+            int runFin = cursor + longitud;
+
+            int cobertura = Math.max(0, Math.min(fin, runFin) - Math.max(inicio, runInicio));
+            if (cobertura > mejorCobertura) {
+                mejorCobertura = cobertura;
+                mejorIndice = i;
+            } else if (cobertura > 0 && cobertura == mejorCobertura) {
+                boolean actualBold = runs.get(i).isBold();
+                boolean mejorBold = runs.get(mejorIndice).isBold();
+                if (actualBold && !mejorBold) {
+                    mejorIndice = i;
+                }
+            }
+
+            cursor = runFin;
+        }
+
+        return mejorIndice;
+    }
+
+    private void copiarFormatoRun(XWPFRun source, XWPFRun target) {
+        if (source == null || target == null) {
+            return;
+        }
+
+        // Copiamos propiedades explícitas cuando existen.
+        if (source.getCTR() != null && source.getCTR().isSetRPr()) {
+            CTRPr runProperties = (CTRPr) source.getCTR().getRPr().copy();
+            target.getCTR().setRPr(runProperties);
+        }
+
+        // Copiamos también el estilo efectivo para cubrir casos donde la negrita
+        // se hereda de estilos y no está materializada en rPr.
+        target.setBold(source.isBold());
+        target.setItalic(source.isItalic());
+        target.setStrikeThrough(source.isStrikeThrough());
+        target.setUnderline(source.getUnderline());
+
+        String color = source.getColor();
+        if (color != null && !color.isBlank()) {
+            target.setColor(color);
+        }
+
+        String fontFamily = source.getFontFamily();
+        if (fontFamily != null && !fontFamily.isBlank()) {
+            target.setFontFamily(fontFamily);
+        }
+
+        int fontSize = source.getFontSize();
+        if (fontSize > 0) {
+            target.setFontSize(fontSize);
+        }
+    }
+
+    private String obtenerTextoRun(XWPFRun run) {
+        if (run == null) {
+            return "";
+        }
+        String texto = run.getText(0);
+        return texto == null ? "" : texto;
+    }
+
+    private record MarcadorRegex(String regex, String valor) {
     }
 
     private void insertarFirmaEnDocumento(XWPFDocument document, Tramite tramite) {
+        recortarParrafosVaciosAlrededorDeFirma(
+            document,
+            RECORTE_PARRAFOS_VACIOS_ANTES,
+            RECORTE_PARRAFOS_VACIOS_DESPUES
+        );
+
         for (XWPFParagraph paragraph : document.getParagraphs()) {
             insertarFirmaEnParrafo(paragraph, document, tramite);
         }
@@ -975,11 +1202,15 @@ public class DocumentoGeneradoService {
         }
 
         String antes = original.substring(0, original.indexOf(marcador));
+        antes = reducirEspacioPrevioFirma(antes, RECORTE_FIRMA_ANTES);
         String despues = original.substring(original.indexOf(marcador) + marcador.length());
+        despues = reducirEspacioPosteriorFirma(despues, RECORTE_FIRMA_DESPUES);
 
         while (!paragraph.getRuns().isEmpty()) {
             paragraph.removeRun(0);
         }
+
+        compactarParrafoFirma(paragraph);
 
         if (!antes.isBlank()) {
             XWPFRun runAntes = paragraph.createRun();
@@ -1009,15 +1240,137 @@ public class DocumentoGeneradoService {
             runDespues.setText(despues);
         }
 
-        XWPFRun runLeyenda = paragraph.createRun();
-        runLeyenda.addBreak();
-        runLeyenda.setFontSize(9);
-        runLeyenda.setText(generarLeyendaFirmaDigital(tramite));
+        if (incluirDetalleFirmaEnPdf) {
+            XWPFRun runDetalle = paragraph.createRun();
+            runDetalle.setFontSize(7);
+            runDetalle.setText(" " + generarLeyendaFirmaDigital(tramite)
+                    + " | Hash de verificación: " + generarHashVisibleFirma(tramite));
+        }
+    }
 
-        XWPFRun runHash = paragraph.createRun();
-        runHash.addBreak();
-        runHash.setFontSize(8);
-        runHash.setText("Hash de verificación: " + generarHashVisibleFirma(tramite));
+    private String reducirEspacioPrevioFirma(String textoAntesFirma, int cantidad) {
+        if (textoAntesFirma == null || textoAntesFirma.isEmpty()) {
+            return textoAntesFirma;
+        }
+
+        String ajustado = textoAntesFirma;
+        int saltosRecortados = 0;
+
+        // Quita hasta N saltos en blanco justo antes de la firma.
+        while (saltosRecortados < cantidad) {
+            String candidato = ajustado.replaceFirst("[\\t ]*\\r?\\n[\\t ]*$", "");
+            if (candidato.equals(ajustado)) {
+                break;
+            }
+            ajustado = candidato;
+            saltosRecortados++;
+        }
+
+        if (saltosRecortados < cantidad) {
+            int espaciosExtra = cantidad - saltosRecortados;
+            ajustado = ajustado.replaceFirst("[\\t ]{0," + espaciosExtra + "}$", "");
+        }
+
+        return ajustado;
+    }
+
+    private String reducirEspacioPosteriorFirma(String textoDespuesFirma, int cantidad) {
+        if (textoDespuesFirma == null || textoDespuesFirma.isEmpty()) {
+            return textoDespuesFirma;
+        }
+
+        String ajustado = textoDespuesFirma;
+        int saltosRecortados = 0;
+
+        // Quita hasta N saltos en blanco justo después de la firma.
+        while (saltosRecortados < cantidad) {
+            String candidato = ajustado.replaceFirst("^[\\t ]*\\r?\\n[\\t ]*", "");
+            if (candidato.equals(ajustado)) {
+                break;
+            }
+            ajustado = candidato;
+            saltosRecortados++;
+        }
+
+        if (saltosRecortados < cantidad) {
+            int espaciosExtra = cantidad - saltosRecortados;
+            ajustado = ajustado.replaceFirst("^[\\t ]{0," + espaciosExtra + "}", "");
+        }
+
+        return ajustado;
+    }
+
+    private void compactarParrafoFirma(XWPFParagraph paragraph) {
+        if (paragraph == null || paragraph.getCTP() == null) {
+            return;
+        }
+
+        paragraph.setPageBreak(false);
+
+        var pPr = paragraph.getCTP().isSetPPr() ? paragraph.getCTP().getPPr() : paragraph.getCTP().addNewPPr();
+        CTSpacing spacing = pPr.isSetSpacing() ? pPr.getSpacing() : pPr.addNewSpacing();
+        spacing.setBefore(BigInteger.ZERO);
+        spacing.setAfter(BigInteger.ZERO);
+    }
+
+    private void recortarParrafosVaciosAlrededorDeFirma(XWPFDocument document, int cantidadAntes, int cantidadDespues) {
+        if (document == null || (cantidadAntes <= 0 && cantidadDespues <= 0)) {
+            return;
+        }
+
+        int i = 0;
+        while (i < document.getBodyElements().size()) {
+            IBodyElement element = document.getBodyElements().get(i);
+            if (!(element instanceof XWPFParagraph paragraph) || !contieneMarcadorFirma(paragraph.getText())) {
+                i++;
+                continue;
+            }
+
+            int pendientes = cantidadAntes;
+            int j = i - 1;
+            while (j >= 0 && pendientes > 0) {
+                IBodyElement previo = document.getBodyElements().get(j);
+                if (!(previo instanceof XWPFParagraph previoParrafo)) {
+                    break;
+                }
+
+                String textoPrevio = previoParrafo.getText() == null ? "" : previoParrafo.getText().trim();
+                if (!textoPrevio.isEmpty()) {
+                    break;
+                }
+
+                document.removeBodyElement(j);
+                i--;
+                j--;
+                pendientes--;
+            }
+
+            int pendientesDespues = cantidadDespues;
+            int k = i + 1;
+            while (k < document.getBodyElements().size() && pendientesDespues > 0) {
+                IBodyElement siguiente = document.getBodyElements().get(k);
+                if (!(siguiente instanceof XWPFParagraph siguienteParrafo)) {
+                    break;
+                }
+
+                String textoSiguiente = siguienteParrafo.getText() == null ? "" : siguienteParrafo.getText().trim();
+                if (!textoSiguiente.isEmpty()) {
+                    break;
+                }
+
+                document.removeBodyElement(k);
+                pendientesDespues--;
+            }
+
+            i++;
+        }
+    }
+
+    private boolean contieneMarcadorFirma(String texto) {
+        if (texto == null || texto.isBlank()) {
+            return false;
+        }
+        return texto.contains(MARCADOR_FIRMA_ANGULAR) || texto.contains(MARCADOR_FIRMA_GUILLEMET);
     }
 
     private String generarLeyendaFirmaDigital(Tramite tramite) {
@@ -1131,7 +1484,7 @@ public class DocumentoGeneradoService {
         }
     }
 
-    private byte[] convertirDocxConPlantillaAPdf(XWPFDocument wordDoc) {
+    private PdfGeneracionResultado convertirDocxConPlantillaAPdf(XWPFDocument wordDoc) {
         try {
             ByteArrayOutputStream docxBytes = new ByteArrayOutputStream();
             wordDoc.write(docxBytes);
@@ -1140,15 +1493,18 @@ public class DocumentoGeneradoService {
             if (usarLibreOffice) {
                 byte[] pdfLibreOffice = convertirDocxConLibreOffice(docxContenido);
                 if (pdfLibreOffice != null && pdfLibreOffice.length > 0) {
-                    return pdfLibreOffice;
+                    return new PdfGeneracionResultado(pdfLibreOffice, "libreoffice");
                 }
                 logger.warn("LibreOffice está habilitado pero no pudo convertir; se usará docx4j como respaldo.");
             }
 
-            return convertirDocxConDocx4j(docxContenido);
+            return new PdfGeneracionResultado(convertirDocxConDocx4j(docxContenido), "docx4j");
         } catch (IOException e) {
             throw new IllegalStateException("No fue posible convertir la plantilla DOCX a PDF", e);
         }
+    }
+
+    private record PdfGeneracionResultado(byte[] contenidoPdf, String engine) {
     }
 
     private byte[] convertirDocxConDocx4j(byte[] docxContenido) {
@@ -1157,12 +1513,15 @@ public class DocumentoGeneradoService {
                     new ByteArrayInputStream(docxContenido)
             );
 
-            Mapper fontMapper = new IdentityPlusMapper();
             PhysicalFont fuenteMavenPro = registrarFuenteMavenProSiDisponible();
-            if (fuenteMavenPro != null) {
-                mapearFuenteMavenPro(fontMapper, fuenteMavenPro, resolverFuenteMavenProBold());
+            PhysicalFont fuenteMavenProBold = resolverFuenteMavenProBold();
+            if (fuenteMavenPro != null && fuenteMavenProBold != null) {
+                Mapper fontMapper = new IdentityPlusMapper();
+                mapearFuenteMavenPro(fontMapper, fuenteMavenPro, fuenteMavenProBold);
+                wordMLPackage.setFontMapper(fontMapper);
+            } else {
+                logger.info("Se conserva el mapeo de fuentes por defecto para mantener negritas de plantilla.");
             }
-            wordMLPackage.setFontMapper(fontMapper);
 
             PdfSettings pdfSettings = new PdfSettings();
             PdfConversion conversion = new Conversion(wordMLPackage);
@@ -1215,7 +1574,7 @@ public class DocumentoGeneradoService {
                     if (fuenteMavenProBoldCache != null) {
                         logger.info("Variante en negrita de '{}' detectada en catálogo de docx4j", FUENTE_MAVEN_PRO);
                     } else {
-                        logger.warn("No se detectó variante bold explícita de '{}'; se usará fallback con la variante regular", FUENTE_MAVEN_PRO);
+                        logger.warn("No se detectó variante bold explícita de '{}'; no se forzará mapeo de fuente para preservar negritas", FUENTE_MAVEN_PRO);
                     }
                 }
                 return fuenteMavenProCache;
@@ -1237,15 +1596,16 @@ public class DocumentoGeneradoService {
             return;
         }
 
-        PhysicalFont boldOrRegular = bold != null ? bold : regular;
         String[] aliases = new String[]{FUENTE_MAVEN_PRO, FUENTE_MAVEN_PRO_ALIAS};
 
         for (String alias : aliases) {
             fontMapper.put(alias, regular);
             fontMapper.registerRegularForm(alias, regular);
             fontMapper.registerItalicForm(alias, regular);
-            fontMapper.registerBoldForm(alias, boldOrRegular);
-            fontMapper.registerBoldItalicForm(alias, boldOrRegular);
+            if (bold != null) {
+                fontMapper.registerBoldForm(alias, bold);
+                fontMapper.registerBoldItalicForm(alias, bold);
+            }
         }
     }
 
@@ -1289,6 +1649,13 @@ public class DocumentoGeneradoService {
                 return entry.getValue();
             }
         }
+
+        // Si se pidió variante en negrita y no se encontró una real, retornamos null para
+        // evitar mapear "bold" a la misma variante regular.
+        if (bold) {
+            return null;
+        }
+
         return firstMaven;
     }
 

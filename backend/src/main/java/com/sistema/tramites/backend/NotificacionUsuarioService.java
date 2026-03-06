@@ -16,9 +16,12 @@ public class NotificacionUsuarioService {
     private static final Logger logger = LoggerFactory.getLogger(NotificacionUsuarioService.class);
 
     private final NotificacionUsuarioRepository notificacionUsuarioRepository;
+    private final WebPushService webPushService;
 
-    public NotificacionUsuarioService(NotificacionUsuarioRepository notificacionUsuarioRepository) {
+    public NotificacionUsuarioService(NotificacionUsuarioRepository notificacionUsuarioRepository,
+                                     WebPushService webPushService) {
         this.notificacionUsuarioRepository = notificacionUsuarioRepository;
+        this.webPushService = webPushService;
     }
 
     public void crearNotificacion(Long usuarioId,
@@ -40,6 +43,14 @@ public class NotificacionUsuarioService {
             notificacion.setLeida(false);
             notificacion.setFechaCreacion(LocalDateTime.now());
             notificacionUsuarioRepository.save(notificacion);
+
+            webPushService.enviarNotificacionAUsuario(
+                    usuarioId,
+                    notificacion.getTitulo(),
+                    notificacion.getMensaje(),
+                    notificacion.getTipo(),
+                    notificacion.getTramiteId()
+            );
         } catch (Exception ex) {
             logger.warn("No se pudo crear notificación para usuario {}: {}", usuarioId, ex.getMessage());
         }

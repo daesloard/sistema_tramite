@@ -80,3 +80,41 @@ Base URL: `http://localhost:8080/api/tramites`
 
 ## Estado
 Proyecto base creado y listo para continuar con nuevas implementaciones (autenticación, archivos adjuntos, seguimiento de estados, notificaciones, etc.).
+
+## Notificaciones Push (Windows, Android, iOS)
+
+### Requisitos generales
+- `https` en despliegue (o `localhost` en desarrollo)
+- Service Worker activo (`frontend/public/sw-notificaciones.js`)
+- Llaves VAPID configuradas en backend
+
+### Configuración backend (variables de entorno)
+```powershell
+$env:APP_WEBPUSH_ENABLED="true"
+$env:APP_WEBPUSH_PUBLIC_KEY="<TU_PUBLIC_KEY>"
+$env:APP_WEBPUSH_PRIVATE_KEY="<TU_PRIVATE_KEY>"
+$env:APP_WEBPUSH_SUBJECT="mailto:sistemas@cabuyaro-meta.gov.co"
+```
+
+### Flujo de activación en cliente
+1. Iniciar sesión en panel.
+2. Activar botón `Noti SO`.
+3. Aceptar permiso del navegador.
+4. El frontend registra suscripción push en backend.
+
+### Prueba rápida de push
+Endpoint autenticado:
+- `POST /api/notificaciones/webpush/test`
+
+Body opcional:
+```json
+{
+	"titulo": "Prueba",
+	"mensaje": "Push funcionando"
+}
+```
+
+### Notas por plataforma
+- Windows (Edge/Chrome): funciona directo en navegador con permiso concedido.
+- Android (Chrome): funciona en navegador y mejora al instalar PWA.
+- iOS (Safari): requiere iOS/iPadOS 16.4+ y usar la app instalada en pantalla de inicio para push estable.
