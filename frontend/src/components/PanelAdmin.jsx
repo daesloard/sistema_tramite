@@ -354,6 +354,55 @@ export default function PanelAdmin({ usuarioActual }) {
   }), [tramites, textoBusquedaAdmin]);
 
   const alertasOperativas = useMemo(() => calcularAlertasOperativas(metricasOperativas), [metricasOperativas]);
+  const resumenPdfHistorico = useMemo(() => {
+    const normalizarMotor = (valor) => (valor || '').toString().trim().toLowerCase();
+
+    return tramites.reduce((acc, tramite) => {
+      const tienePdf = !!(tramite?.nombrePdfGenerado || tramite?.ruta_certificado_final);
+      if (!tienePdf) {
+        return acc;
+      }
+
+      acc.total += 1;
+      const motor = normalizarMotor(tramite?.motorPdfGenerado);
+      if (motor === 'gotenberg') {
+        acc.engineGotenberg += 1;
+      } else if (motor === 'libreoffice') {
+        acc.engineLibreoffice += 1;
+      } else if (motor === 'docx4j') {
+        acc.engineDocx4j += 1;
+      } else {
+        acc.engineUnknown += 1;
+      }
+      return acc;
+    }, {
+      total: 0,
+      engineGotenberg: 0,
+      engineLibreoffice: 0,
+      engineDocx4j: 0,
+      engineUnknown: 0,
+    });
+  }, [tramites]);
+
+  const pdfTotalMetricas = Number(metricasOperativas?.pdf?.total);
+  const usarFallbackPdfHistorico = Number.isFinite(pdfTotalMetricas) && pdfTotalMetricas <= 0 && resumenPdfHistorico.total > 0;
+
+  const pdfTotalMostrado = usarFallbackPdfHistorico
+    ? resumenPdfHistorico.total
+    : metricasOperativas?.pdf?.total;
+  const pdfEngineGotenbergMostrado = usarFallbackPdfHistorico
+    ? resumenPdfHistorico.engineGotenberg
+    : metricasOperativas?.pdf?.engineGotenberg;
+  const pdfEngineLibreofficeMostrado = usarFallbackPdfHistorico
+    ? resumenPdfHistorico.engineLibreoffice
+    : metricasOperativas?.pdf?.engineLibreoffice;
+  const pdfEngineDocx4jMostrado = usarFallbackPdfHistorico
+    ? resumenPdfHistorico.engineDocx4j
+    : metricasOperativas?.pdf?.engineDocx4j;
+  const pdfEngineUnknownMostrado = usarFallbackPdfHistorico
+    ? resumenPdfHistorico.engineUnknown
+    : 0;
+
   const estadoGeneralOperativo = useMemo(() => {
     if (!metricasOperativas || metricasOperativas.available === false) return 'info';
     if (alertasOperativas.some((item) => item.estado === 'critical')) return 'critical';
@@ -738,16 +787,24 @@ export default function PanelAdmin({ usuarioActual }) {
 
                   <div style={styles.metricaCard}>
                     <p style={styles.metricaTitulo}>Generacion PDF total</p>
-                    <p style={styles.metricaValor}>{formatoNumeroMetrica(metricasOperativas?.pdf?.total)}</p>
+                    <p style={styles.metricaValor}>{formatoNumeroMetrica(pdfTotalMostrado)}</p>
                     <p style={styles.metricaDetalle}>
                       OK: {formatoNumeroMetrica(metricasOperativas?.pdf?.success)} | Error: {formatoNumeroMetrica(metricasOperativas?.pdf?.errorTotal)}
                     </p>
+                    {usarFallbackPdfHistorico ? (
+                      <p style={styles.metricaDetalle}>Fuente historial BD (respaldo por reinicio/precarga).</p>
+                    ) : null}
                   </div>
 
                   <div style={styles.metricaCard}>
                     <p style={styles.metricaTitulo}>Motor PDF</p>
-                    <p style={styles.metricaValor}>LO: {formatoNumeroMetrica(metricasOperativas?.pdf?.engineLibreoffice)}</p>
-                    <p style={styles.metricaDetalle}>docx4j: {formatoNumeroMetrica(metricasOperativas?.pdf?.engineDocx4j)}</p>
+                    <p style={styles.metricaValor}>GO: {formatoNumeroMetrica(pdfEngineGotenbergMostrado)}</p>
+                    <p style={styles.metricaDetalle}>
+                      LO: {formatoNumeroMetrica(pdfEngineLibreofficeMostrado)} | docx4j: {formatoNumeroMetrica(pdfEngineDocx4jMostrado)}
+                    </p>
+                    {usarFallbackPdfHistorico ? (
+                      <p style={styles.metricaDetalle}>Motor sin traza: {formatoNumeroMetrica(pdfEngineUnknownMostrado)}</p>
+                    ) : null}
                   </div>
 
                   <div style={styles.metricaCard}>
@@ -756,6 +813,13 @@ export default function PanelAdmin({ usuarioActual }) {
                     <p style={styles.metricaDetalle}>
                       Maximo: {formatoDuracion(metricasOperativas?.pdf?.maxSeconds)} | Errores: {formatoNumeroMetrica(metricasOperativas?.pdf?.errors)}
                     </p>
+                  </div>
+
+                  <div style={styles.metricaCard}>
+                    <p style={styles.metricaTitulo}>Etapas PDF (promedio)</p>
+                    <p style={styles.metricaValor}>Convertir: {formatoDuracion(metricasOperativas?.pdf?.stageConvertAvgSeconds)}</p>
+                    <p style={styles.metricaDetalle}>Proteger: {formatoDuracion(metricasOperativas?.pdf?.stageProtectAvgSeconds)}</p>
+                    <p style={styles.metricaDetalle}>Firmar: {formatoDuracion(metricasOperativas?.pdf?.stageSignAvgSeconds)}</p>
                   </div>
 
                   <div style={styles.metricaCard}>

@@ -337,6 +337,7 @@ export async function obtenerMetricasOperativasAdmin() {
   const tienePdfTotal = catalogoTieneMetrica(catalogo, 'tramites.pdf.generation.total');
   const tienePdfDuration = catalogoTieneMetrica(catalogo, 'tramites.pdf.generation.duration');
   const tienePdfErrors = catalogoTieneMetrica(catalogo, 'tramites.pdf.generation.errors');
+  const tienePdfStageDuration = catalogoTieneMetrica(catalogo, 'tramites.pdf.stage.duration');
 
   const [
     metricaHttp,
@@ -346,6 +347,7 @@ export async function obtenerMetricasOperativasAdmin() {
     metricaPdfTotal,
     metricaPdfDuration,
     metricaPdfErrors,
+    metricaPdfStageDuration,
     prometheusRaw,
   ] = await Promise.all([
     tieneHttp ? obtenerMetricaActuator('http.server.requests').catch(() => null) : Promise.resolve(null),
@@ -355,6 +357,7 @@ export async function obtenerMetricasOperativasAdmin() {
     tienePdfTotal ? obtenerMetricaActuator('tramites.pdf.generation.total').catch(() => null) : Promise.resolve(null),
     tienePdfDuration ? obtenerMetricaActuator('tramites.pdf.generation.duration').catch(() => null) : Promise.resolve(null),
     tienePdfErrors ? obtenerMetricaActuator('tramites.pdf.generation.errors').catch(() => null) : Promise.resolve(null),
+    tienePdfStageDuration ? obtenerMetricaActuator('tramites.pdf.stage.duration').catch(() => null) : Promise.resolve(null),
     obtenerPrometheusRaw().catch(() => ''),
   ]);
 
@@ -365,7 +368,20 @@ export async function obtenerMetricasOperativasAdmin() {
   const consultarPdfOutcomeErrorTotal = metricaTieneTag(metricaPdfTotal, 'outcome', 'error');
   const consultarPdfEngineLibreoffice = metricaTieneTag(metricaPdfTotal, 'engine', 'libreoffice');
   const consultarPdfEngineDocx4j = metricaTieneTag(metricaPdfTotal, 'engine', 'docx4j');
+  const consultarPdfEngineGotenberg = metricaTieneTag(metricaPdfTotal, 'engine', 'gotenberg');
   const consultarPdfOutcomeSuccessDuration = metricaTieneTag(metricaPdfDuration, 'outcome', 'success');
+  const consultarPdfStageConvertSuccess = (
+    metricaTieneTag(metricaPdfStageDuration, 'stage', 'convert')
+    && metricaTieneTag(metricaPdfStageDuration, 'outcome', 'success')
+  );
+  const consultarPdfStageProtectSuccess = (
+    metricaTieneTag(metricaPdfStageDuration, 'stage', 'protect')
+    && metricaTieneTag(metricaPdfStageDuration, 'outcome', 'success')
+  );
+  const consultarPdfStageSignSuccess = (
+    metricaTieneTag(metricaPdfStageDuration, 'stage', 'sign')
+    && metricaTieneTag(metricaPdfStageDuration, 'outcome', 'success')
+  );
 
   const [
     metricaPostFirmaSuccess,
@@ -375,7 +391,11 @@ export async function obtenerMetricasOperativasAdmin() {
     metricaPdfErrorTotal,
     metricaPdfEngineLibreoffice,
     metricaPdfEngineDocx4j,
+    metricaPdfEngineGotenberg,
     metricaPdfDurationSuccess,
+    metricaPdfStageConvertSuccess,
+    metricaPdfStageProtectSuccess,
+    metricaPdfStageSignSuccess,
   ] = await Promise.all([
     consultarOutcomeSuccessTotal
       ? obtenerMetricaActuator('tramites.postfirma.total', [['outcome', 'success']]).catch(() => null)
@@ -398,8 +418,20 @@ export async function obtenerMetricasOperativasAdmin() {
     consultarPdfEngineDocx4j
       ? obtenerMetricaActuator('tramites.pdf.generation.total', [['engine', 'docx4j']]).catch(() => null)
       : Promise.resolve(null),
+    consultarPdfEngineGotenberg
+      ? obtenerMetricaActuator('tramites.pdf.generation.total', [['engine', 'gotenberg']]).catch(() => null)
+      : Promise.resolve(null),
     consultarPdfOutcomeSuccessDuration
       ? obtenerMetricaActuator('tramites.pdf.generation.duration', [['outcome', 'success']]).catch(() => null)
+      : Promise.resolve(null),
+    consultarPdfStageConvertSuccess
+      ? obtenerMetricaActuator('tramites.pdf.stage.duration', [['stage', 'convert'], ['outcome', 'success']]).catch(() => null)
+      : Promise.resolve(null),
+    consultarPdfStageProtectSuccess
+      ? obtenerMetricaActuator('tramites.pdf.stage.duration', [['stage', 'protect'], ['outcome', 'success']]).catch(() => null)
+      : Promise.resolve(null),
+    consultarPdfStageSignSuccess
+      ? obtenerMetricaActuator('tramites.pdf.stage.duration', [['stage', 'sign'], ['outcome', 'success']]).catch(() => null)
       : Promise.resolve(null),
   ]);
 
@@ -407,6 +439,13 @@ export async function obtenerMetricasOperativasAdmin() {
   const duracionOkTotalTime = leerAgregadoMetrica(metricaPostFirmaDurationSuccess, 'TOTAL_TIME', 'sum');
   const duracionPdfCount = leerAgregadoMetrica(metricaPdfDurationSuccess || metricaPdfDuration, 'COUNT', 'sum');
   const duracionPdfTotalTime = leerAgregadoMetrica(metricaPdfDurationSuccess || metricaPdfDuration, 'TOTAL_TIME', 'sum');
+  const calcularPromedioTimer = (metrica) => {
+    const count = leerAgregadoMetrica(metrica, 'COUNT', 'sum');
+    const totalTime = leerAgregadoMetrica(metrica, 'TOTAL_TIME', 'sum');
+    return (Number.isFinite(count) && count > 0 && Number.isFinite(totalTime))
+      ? (totalTime / count)
+      : null;
+  };
 
   return {
     available: true,
@@ -432,6 +471,7 @@ export async function obtenerMetricasOperativasAdmin() {
       errors: leerAgregadoMetrica(metricaPdfErrors, 'COUNT', 'sum'),
       engineLibreoffice: leerAgregadoMetrica(metricaPdfEngineLibreoffice, 'COUNT', 'sum'),
       engineDocx4j: leerAgregadoMetrica(metricaPdfEngineDocx4j, 'COUNT', 'sum'),
+      engineGotenberg: leerAgregadoMetrica(metricaPdfEngineGotenberg, 'COUNT', 'sum'),
       avgSeconds: (
         Number.isFinite(duracionPdfCount)
         && duracionPdfCount > 0
@@ -440,6 +480,12 @@ export async function obtenerMetricasOperativasAdmin() {
         ? (duracionPdfTotalTime / duracionPdfCount)
         : null,
       maxSeconds: leerAgregadoMetrica(metricaPdfDurationSuccess || metricaPdfDuration, 'MAX', 'max'),
+      stageConvertAvgSeconds: calcularPromedioTimer(metricaPdfStageConvertSuccess),
+      stageConvertMaxSeconds: leerAgregadoMetrica(metricaPdfStageConvertSuccess, 'MAX', 'max'),
+      stageProtectAvgSeconds: calcularPromedioTimer(metricaPdfStageProtectSuccess),
+      stageProtectMaxSeconds: leerAgregadoMetrica(metricaPdfStageProtectSuccess, 'MAX', 'max'),
+      stageSignAvgSeconds: calcularPromedioTimer(metricaPdfStageSignSuccess),
+      stageSignMaxSeconds: leerAgregadoMetrica(metricaPdfStageSignSuccess, 'MAX', 'max'),
     },
     http: {
       count: leerAgregadoMetrica(metricaHttp, 'COUNT', 'sum'),

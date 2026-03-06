@@ -305,6 +305,10 @@ export default function PanelVerificador() {
       mostrarAvisoPanel('warning', 'Por favor, registra el consecutivo del verificador');
       return;
     }
+    if (!/^\d+$/.test(consecutivo.trim())) {
+      mostrarAvisoPanel('warning', 'El consecutivo solo debe contener numeros');
+      return;
+    }
 
     setProcesando(true);
     try {
@@ -349,6 +353,10 @@ export default function PanelVerificador() {
     }
     if (!consecutivo.trim()) {
       mostrarAvisoPanel('warning', 'Por favor, registra el consecutivo del verificador');
+      return;
+    }
+    if (!/^\d+$/.test(consecutivo.trim())) {
+      mostrarAvisoPanel('warning', 'El consecutivo solo debe contener numeros');
       return;
     }
 
@@ -534,7 +542,7 @@ export default function PanelVerificador() {
                     style={{ ...styles.item, ...(selectedSolicitud?.id === solicitud.id ? styles.itemActivo : {}) }}
                     onClick={() => {
                       setSelectedSolicitud(solicitud);
-                      setConsecutivo(solicitud.consecutivoVerificador || '');
+                      setConsecutivo((solicitud.consecutivoVerificador || '').toString().replace(/\D/g, '').slice(0, 6));
                       setObservaciones(solicitud.observaciones || '');
                     }}
                   >
@@ -596,7 +604,7 @@ export default function PanelVerificador() {
                   <div style={styles.cardInfo}><span style={styles.label}>Tipo Certificado</span><p style={styles.value}>{selectedSolicitud.tipo_certificado || 'No especificado'}</p></div>
                   <div style={styles.cardInfo}><span style={styles.label}>Fecha Radicación</span><p style={styles.value}>{formatearFechaHora(selectedSolicitud.fechaRadicacion)}</p></div>
                   {textoDiasHabilesSeleccionada ? <div style={styles.cardInfo}><span style={styles.label}>Tiempo restante</span><p style={styles.value}>{textoDiasHabilesSeleccionada}</p></div> : null}
-                  <div style={styles.cardInfo}><span style={styles.label}>Consecutivo Documental</span><input style={styles.input} value={consecutivo} onChange={(e) => setConsecutivo(e.target.value.toUpperCase())} readOnly={!esPendienteSeleccionada} /></div>
+                  <div style={styles.cardInfo}><span style={styles.label}>Consecutivo Documental</span><input style={styles.input} value={consecutivo} onChange={(e) => setConsecutivo(e.target.value.replace(/\D/g, '').slice(0, 6))} readOnly={!esPendienteSeleccionada} inputMode="numeric" pattern="[0-9]*" autoComplete="off" /></div>
                 </div>
               </div>
 

@@ -26,4 +26,6 @@ public interface TramiteResumenView {
     String getObservaciones();
     String getConsecutivoVerificador();
     String getRuta_certificado_final();
+    String getNombrePdfGenerado();
+    String getMotorPdfGenerado();
 }

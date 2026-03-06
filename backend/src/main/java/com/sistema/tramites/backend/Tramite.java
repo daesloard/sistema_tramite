@@ -176,6 +176,9 @@ public class Tramite {
     @Column
     private String tipoContenidoPdfGenerado;
 
+    @Column(length = 32)
+    private String motorPdfGenerado;
+
     @Column(unique = true)
     private String codigoVerificacion;
 
@@ -585,6 +588,14 @@ public class Tramite {
 
     public void setTipoContenidoPdfGenerado(String tipoContenidoPdfGenerado) {
         this.tipoContenidoPdfGenerado = tipoContenidoPdfGenerado;
+    }
+
+    public String getMotorPdfGenerado() {
+        return motorPdfGenerado;
+    }
+
+    public void setMotorPdfGenerado(String motorPdfGenerado) {
+        this.motorPdfGenerado = motorPdfGenerado;
     }
 
     public String getCodigoVerificacion() {
