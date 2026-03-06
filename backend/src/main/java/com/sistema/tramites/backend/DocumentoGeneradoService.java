@@ -1087,17 +1087,11 @@ public class DocumentoGeneradoService {
             return;
         }
 
-        // Copiamos propiedades explícitas cuando existen.
-        if (source.getCTR() != null && source.getCTR().isSetRPr()) {
-            CTRPr runProperties = (CTRPr) source.getCTR().getRPr().copy();
-            target.getCTR().setRPr(runProperties);
-        }
-
-        // Copiamos también el estilo efectivo para cubrir casos donde la negrita
-        // se hereda de estilos y no está materializada en rPr.
+        // Aplicamos solo propiedades "seguras" para evitar arrastrar efectos de
+        // texto avanzados del DOCX (que en algunos motores PDF pueden verse como tachado).
         target.setBold(source.isBold());
         target.setItalic(source.isItalic());
-        target.setStrikeThrough(source.isStrikeThrough());
+        target.setStrikeThrough(false);
         target.setUnderline(source.getUnderline());
 
         String color = source.getColor();
@@ -1113,6 +1107,17 @@ public class DocumentoGeneradoService {
         int fontSize = source.getFontSize();
         if (fontSize > 0) {
             target.setFontSize(fontSize);
+        }
+
+        // Limpieza defensiva por si el constructor del run arrastra marcadores de tachado.
+        if (target.getCTR() != null && target.getCTR().isSetRPr()) {
+            CTRPr rPr = target.getCTR().getRPr();
+            if (rPr.isSetStrike()) {
+                rPr.unsetStrike();
+            }
+            if (rPr.isSetDstrike()) {
+                rPr.unsetDstrike();
+            }
         }
     }
 
