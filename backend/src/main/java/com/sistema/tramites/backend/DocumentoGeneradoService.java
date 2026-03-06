@@ -1200,12 +1200,22 @@ public class DocumentoGeneradoService {
         // Limpieza defensiva por si el constructor del run arrastra marcadores de tachado.
         if (target.getCTR() != null && target.getCTR().isSetRPr()) {
             CTRPr rPr = target.getCTR().getRPr();
-            if (rPr.isSetStrike()) {
-                rPr.unsetStrike();
-            }
-            if (rPr.isSetDstrike()) {
-                rPr.unsetDstrike();
-            }
+            invocarMetodoSinArgumentosSiExiste(rPr, "unsetStrike");
+            invocarMetodoSinArgumentosSiExiste(rPr, "unsetDstrike");
+        }
+    }
+
+    private void invocarMetodoSinArgumentosSiExiste(Object target, String methodName) {
+        if (target == null || methodName == null || methodName.isBlank()) {
+            return;
+        }
+
+        try {
+            target.getClass().getMethod(methodName).invoke(target);
+        } catch (NoSuchMethodException ignored) {
+            // Algunas versiones de POI/XMLBeans no exponen estos metodos.
+        } catch (Exception ex) {
+            logger.debug("No fue posible invocar {} en {}: {}", methodName, target.getClass().getSimpleName(), ex.getMessage());
         }
     }
 
