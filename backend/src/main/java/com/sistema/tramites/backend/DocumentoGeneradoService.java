@@ -112,6 +112,7 @@ public class DocumentoGeneradoService {
 
     private final ResourceLoader resourceLoader;
     private final MeterRegistry meterRegistry;
+    private final boolean usarSpire;
     private final boolean usarLibreOffice;
     private final boolean usarDocx4j;
     private final boolean usarGotenberg;
@@ -142,6 +143,7 @@ public class DocumentoGeneradoService {
 
     public DocumentoGeneradoService(ResourceLoader resourceLoader,
                                     MeterRegistry meterRegistry,
+                                    @Value("${app.pdf.use-spire:false}") boolean usarSpire,
                                     @Value("${app.pdf.use-libreoffice:false}") boolean usarLibreOffice,
                                     @Value("${app.pdf.use-docx4j:true}") boolean usarDocx4j,
                                     @Value("${app.pdf.gotenberg.enabled:false}") boolean usarGotenberg,
@@ -161,6 +163,7 @@ public class DocumentoGeneradoService {
                                     @Value("${app.pdf.digital-sign.p12-alias:}") String certificadoP12Alias) {
         this.resourceLoader = resourceLoader;
         this.meterRegistry = meterRegistry;
+                        this.usarSpire = usarSpire;
         this.usarLibreOffice = usarLibreOffice;
         this.usarDocx4j = usarDocx4j;
         this.usarGotenberg = usarGotenberg;
@@ -1618,6 +1621,21 @@ public class DocumentoGeneradoService {
             byte[] docxContenido = docxBytes.toByteArray();
             Exception ultimoError = null;
 
+            if (usarSpire) {
+                try {
+                    byte[] pdfSpire = ejecutarEtapaPdfConMetricas(
+                            "convert",
+                            "spire.doc",
+                            tipo,
+                            () -> convertirDocxConSpire(docxContenido)
+                    );
+                    return new PdfGeneracionResultado(pdfSpire, "spire.doc");
+                } catch (Exception ex) {
+                    ultimoError = ex;
+                    logger.warn("Spire.Doc no pudo convertir DOCX a PDF. Se usará motor de respaldo habilitado: {}", ex.getMessage());
+                }
+            }
+
             if (usarGotenberg) {
                 if (!gotenbergDisponible()) {
                     String mensaje = "Gotenberg está habilitado pero app.pdf.gotenberg.url no está configurado";
@@ -1686,7 +1704,7 @@ public class DocumentoGeneradoService {
             }
 
             throw new IllegalStateException(
-                    "No hay motores de conversion DOCX->PDF habilitados. Configure Gotenberg o habilite app.pdf.use-docx4j/app.pdf.use-libreoffice"
+                    "No hay motores de conversion DOCX->PDF habilitados. Configure Spire/Gotenberg o habilite app.pdf.use-docx4j/app.pdf.use-libreoffice"
             );
         } catch (IOException e) {
             throw new IllegalStateException("No fue posible convertir la plantilla DOCX a PDF", e);
@@ -1694,6 +1712,19 @@ public class DocumentoGeneradoService {
     }
 
     private record PdfGeneracionResultado(byte[] contenidoPdf, String engine) {
+    }
+
+    private byte[] convertirDocxConSpire(byte[] docxContenido) {
+        try {
+            com.spire.doc.Document document = new com.spire.doc.Document();
+            document.loadFromStream(new ByteArrayInputStream(docxContenido), com.spire.doc.FileFormat.Docx);
+
+            ByteArrayOutputStream pdfOutput = new ByteArrayOutputStream();
+            document.saveToStream(pdfOutput, com.spire.doc.FileFormat.PDF);
+            return pdfOutput.toByteArray();
+        } catch (Exception ex) {
+            throw new IllegalStateException("No fue posible convertir la plantilla DOCX a PDF con Spire.Doc", ex);
+        }
     }
 
     private byte[] convertirDocxConDocx4j(byte[] docxContenido) {
