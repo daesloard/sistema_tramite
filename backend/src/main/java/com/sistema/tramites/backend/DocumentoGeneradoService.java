@@ -115,6 +115,7 @@ public class DocumentoGeneradoService {
     private final ResourceLoader resourceLoader;
     private final MeterRegistry meterRegistry;
     private final boolean usarLibreOffice;
+    private final boolean usarDocx4j;
     private final boolean usarGotenberg;
     private final String gotenbergUrl;
     private final int gotenbergTimeoutSegundos;
@@ -140,6 +141,7 @@ public class DocumentoGeneradoService {
     public DocumentoGeneradoService(ResourceLoader resourceLoader,
                                     MeterRegistry meterRegistry,
                                     @Value("${app.pdf.use-libreoffice:false}") boolean usarLibreOffice,
+                                    @Value("${app.pdf.use-docx4j:true}") boolean usarDocx4j,
                                     @Value("${app.pdf.gotenberg.enabled:false}") boolean usarGotenberg,
                                     @Value("${app.pdf.gotenberg.url:}") String gotenbergUrl,
                                     @Value("${app.pdf.gotenberg.timeout-seconds:25}") int gotenbergTimeoutSegundos,
@@ -154,6 +156,7 @@ public class DocumentoGeneradoService {
         this.resourceLoader = resourceLoader;
         this.meterRegistry = meterRegistry;
         this.usarLibreOffice = usarLibreOffice;
+        this.usarDocx4j = usarDocx4j;
         this.usarGotenberg = usarGotenberg;
         this.gotenbergUrl = gotenbergUrl;
         this.gotenbergTimeoutSegundos = gotenbergTimeoutSegundos;
@@ -1638,20 +1641,33 @@ public class DocumentoGeneradoService {
                 }
             }
 
-            try {
-                byte[] pdfDocx4j = ejecutarEtapaPdfConMetricas(
-                        "convert",
-                        "docx4j",
-                        tipo,
-                        () -> convertirDocxConDocx4j(docxContenido)
-                );
-                return new PdfGeneracionResultado(pdfDocx4j, "docx4j");
-            } catch (Exception ex) {
-                if (ultimoError != null && ultimoError != ex) {
-                    ex.addSuppressed(ultimoError);
+            if (usarDocx4j) {
+                try {
+                    byte[] pdfDocx4j = ejecutarEtapaPdfConMetricas(
+                            "convert",
+                            "docx4j",
+                            tipo,
+                            () -> convertirDocxConDocx4j(docxContenido)
+                    );
+                    return new PdfGeneracionResultado(pdfDocx4j, "docx4j");
+                } catch (Exception ex) {
+                    if (ultimoError != null && ultimoError != ex) {
+                        ex.addSuppressed(ultimoError);
+                    }
+                    throw ex;
                 }
-                throw ex;
             }
+
+            if (ultimoError != null) {
+                throw new IllegalStateException(
+                        "No fue posible convertir DOCX a PDF con los motores habilitados (docx4j desactivado)",
+                        ultimoError
+                );
+            }
+
+            throw new IllegalStateException(
+                    "No hay motores de conversion DOCX->PDF habilitados. Configure Gotenberg o habilite app.pdf.use-docx4j/app.pdf.use-libreoffice"
+            );
         } catch (IOException e) {
             throw new IllegalStateException("No fue posible convertir la plantilla DOCX a PDF", e);
         }
