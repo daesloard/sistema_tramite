@@ -48,6 +48,14 @@ public class PostFirmaRecoveryScheduler {
                         fechaLimite
                 );
 
+        List<Tramite> pendientesSinPdf = tramiteRepository
+            .findTop100ByEstadoInAndFirmaAlcaldeIsNotNullAndFechaFirmaAlcaldeBeforeAndContenidoPdfGeneradoIsNullOrderByFechaFirmaAlcaldeAsc(
+                List.of(EstadoTramite.FINALIZADO, EstadoTramite.RECHAZADO),
+                fechaLimite
+            );
+
+        pendientes.addAll(pendientesSinPdf);
+
         if (pendientes.isEmpty()) {
             return;
         }

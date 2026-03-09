@@ -15,6 +15,10 @@ public interface TramiteRepository extends JpaRepository<Tramite, Long> {
 		EstadoTramite estado,
 		LocalDateTime fechaLimite
 	);
+	List<Tramite> findTop100ByEstadoInAndFirmaAlcaldeIsNotNullAndFechaFirmaAlcaldeBeforeAndContenidoPdfGeneradoIsNullOrderByFechaFirmaAlcaldeAsc(
+		List<EstadoTramite> estados,
+		LocalDateTime fechaLimite
+	);
 
 	@Query("""
 			select

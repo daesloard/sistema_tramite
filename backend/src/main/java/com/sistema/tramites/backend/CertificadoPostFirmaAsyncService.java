@@ -71,15 +71,12 @@ public class CertificadoPostFirmaAsyncService {
             );
 
             boolean verificacionAprobada = resolverDecisionVerificacion(tramite);
+            EstadoTramite estadoObjetivo = verificacionAprobada ? EstadoTramite.FINALIZADO : EstadoTramite.RECHAZADO;
 
             EstadoTramite estadoAnterior = tramite.getEstado();
-            if (estadoAnterior == EstadoTramite.FINALIZADO || estadoAnterior == EstadoTramite.RECHAZADO) {
-                log.info("Post-firma omitida para trámite {} porque ya está en estado final ({})", tramiteId, estadoAnterior);
-                outcome = "already_final_state";
-                return;
-            }
-
-            if (estadoAnterior != EstadoTramite.EN_FIRMA) {
+            if (estadoAnterior != EstadoTramite.EN_FIRMA
+                    && estadoAnterior != EstadoTramite.FINALIZADO
+                    && estadoAnterior != EstadoTramite.RECHAZADO) {
                 log.warn("Se omitió post-firma para trámite {} porque no está EN_FIRMA (estado={})",
                         tramiteId, estadoAnterior);
                 outcome = "invalid_state";
@@ -93,8 +90,27 @@ public class CertificadoPostFirmaAsyncService {
             }
 
             boolean actualizado = false;
+            boolean estadoActualizado = false;
+
+            if (estadoAnterior == EstadoTramite.EN_FIRMA) {
+                tramite.setEstado(estadoObjetivo);
+                actualizado = true;
+                estadoActualizado = true;
+            }
+
             byte[] contenidoPdf = tramite.getContenidoPdfGenerado();
             String observaciones = tramite.getObservaciones() == null ? "" : tramite.getObservaciones();
+
+            if ((estadoAnterior == EstadoTramite.FINALIZADO || estadoAnterior == EstadoTramite.RECHAZADO)
+                    && contenidoPdf != null
+                    && contenidoPdf.length > 0
+                    && tramite.getHashDocumentoGenerado() != null
+                    && !tramite.getHashDocumentoGenerado().isBlank()) {
+                log.info("Post-firma omitida para trámite {} porque ya está finalizado y con PDF", tramiteId);
+                outcome = "already_final_state";
+                return;
+            }
+
             if (!verificacionAprobada || contenidoPdf == null || contenidoPdf.length == 0) {
                 documentoGeneradoService.generarYAdjuntarPdf(tramite, verificacionAprobada, observaciones);
                 contenidoPdf = tramite.getContenidoPdfGenerado();
@@ -103,13 +119,16 @@ public class CertificadoPostFirmaAsyncService {
 
             if (contenidoPdf == null || contenidoPdf.length == 0) {
                 log.warn("No se pudo generar PDF final para trámite {}. Se omite envío de correo.", tramiteId);
+                if (actualizado) {
+                    tramiteRepository.save(tramite);
+                }
                 auditoriaTramiteService.registrarEventoInmediato(
                         tramite.getId(),
                         null,
                         "POST_FIRMA_SIN_PDF",
                         "No fue posible generar PDF final durante post-firma para radicado " + tramite.getNumeroRadicado(),
                         estadoAnterior,
-                        estadoAnterior
+                        tramite.getEstado()
                 );
                 outcome = "pdf_generation_failed";
                 return;
@@ -120,25 +139,33 @@ public class CertificadoPostFirmaAsyncService {
                 actualizado = true;
             }
 
-            tramite.setEstado(verificacionAprobada ? EstadoTramite.FINALIZADO : EstadoTramite.RECHAZADO);
-            actualizado = true;
-
             if (actualizado) {
                 tramite = tramiteRepository.save(tramite);
                 contenidoPdf = tramite.getContenidoPdfGenerado();
             }
 
             Long usuarioAlcaldeId = (tramite.getUsuarioAlcalde() != null) ? tramite.getUsuarioAlcalde().getId() : null;
-            auditoriaTramiteService.registrarEventoInmediato(
-                tramite.getId(),
-                usuarioAlcaldeId,
-                "FIRMA_ALCALDE",
-                "Documento firmado por alcalde y "
-                        + (verificacionAprobada ? "finalizado" : "marcado como rechazado")
-                        + " para radicado " + tramite.getNumeroRadicado(),
-                estadoAnterior,
-                tramite.getEstado()
-            );
+            if (estadoActualizado) {
+                auditoriaTramiteService.registrarEventoInmediato(
+                    tramite.getId(),
+                    usuarioAlcaldeId,
+                    "FIRMA_ALCALDE",
+                    "Documento firmado por alcalde y "
+                            + (verificacionAprobada ? "finalizado" : "marcado como rechazado")
+                            + " para radicado " + tramite.getNumeroRadicado(),
+                    estadoAnterior,
+                    tramite.getEstado()
+                );
+            } else {
+                auditoriaTramiteService.registrarEventoInmediato(
+                    tramite.getId(),
+                    usuarioAlcaldeId,
+                    "POST_FIRMA_PDF_RECUPERADO",
+                    "Se recuperó PDF faltante para radicado " + tramite.getNumeroRadicado(),
+                    estadoAnterior,
+                    tramite.getEstado()
+                );
+            }
 
             certificadoDriveAsyncService.subirCertificadoFirmado(tramite.getId());
 
