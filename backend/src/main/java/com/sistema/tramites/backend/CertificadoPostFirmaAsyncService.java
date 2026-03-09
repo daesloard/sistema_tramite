@@ -94,8 +94,10 @@ public class CertificadoPostFirmaAsyncService {
 
             if (estadoAnterior == EstadoTramite.EN_FIRMA) {
                 tramite.setEstado(estadoObjetivo);
-                actualizado = true;
                 estadoActualizado = true;
+                // Persistir el cambio de estado antes de generar PDF para evitar
+                // que un fallo de conversión deje el trámite atascado en EN_FIRMA.
+                tramite = tramiteRepository.save(tramite);
             }
 
             byte[] contenidoPdf = tramite.getContenidoPdfGenerado();
@@ -112,16 +114,28 @@ public class CertificadoPostFirmaAsyncService {
             }
 
             if (!verificacionAprobada || contenidoPdf == null || contenidoPdf.length == 0) {
-                documentoGeneradoService.generarYAdjuntarPdf(tramite, verificacionAprobada, observaciones);
-                contenidoPdf = tramite.getContenidoPdfGenerado();
-                actualizado = true;
+                try {
+                    documentoGeneradoService.generarYAdjuntarPdf(tramite, verificacionAprobada, observaciones);
+                    contenidoPdf = tramite.getContenidoPdfGenerado();
+                    actualizado = true;
+                } catch (Exception genEx) {
+                    log.warn("No se pudo generar PDF final para trámite {}: {}", tramiteId, genEx.getMessage());
+                    auditoriaTramiteService.registrarEventoInmediato(
+                            tramite.getId(),
+                            null,
+                            "POST_FIRMA_SIN_PDF",
+                            "No fue posible generar PDF final durante post-firma para radicado " + tramite.getNumeroRadicado()
+                                    + ". Estado mantenido en " + tramite.getEstado(),
+                            estadoAnterior,
+                            tramite.getEstado()
+                    );
+                    outcome = "pdf_generation_failed";
+                    return;
+                }
             }
 
             if (contenidoPdf == null || contenidoPdf.length == 0) {
                 log.warn("No se pudo generar PDF final para trámite {}. Se omite envío de correo.", tramiteId);
-                if (actualizado) {
-                    tramiteRepository.save(tramite);
-                }
                 auditoriaTramiteService.registrarEventoInmediato(
                         tramite.getId(),
                         null,

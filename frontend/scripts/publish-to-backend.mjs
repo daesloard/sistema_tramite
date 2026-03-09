@@ -28,12 +28,12 @@ async function publish() {
 
   await cp(distDir, backendStaticDir, { recursive: true });
 
-  // eslint-disable-next-line no-console
+   
   console.log(`Frontend publicado en: ${backendStaticDir}`);
 }
 
 publish().catch((error) => {
-  // eslint-disable-next-line no-console
+   
   console.error('Error publicando frontend en backend:', error.message);
   process.exitCode = 1;
 });

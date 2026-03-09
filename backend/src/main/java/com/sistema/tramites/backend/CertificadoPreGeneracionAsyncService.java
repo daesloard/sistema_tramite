@@ -44,8 +44,23 @@ public class CertificadoPreGeneracionAsyncService {
             }
 
             documentoGeneradoService.generarYAdjuntarPdf(tramite, true, "");
-            tramite.setHashDocumentoGenerado(calcularHashSha256(tramite.getContenidoPdfGenerado()));
-            tramiteRepository.save(tramite);
+            byte[] contenidoGenerado = tramite.getContenidoPdfGenerado();
+            if (contenidoGenerado == null || contenidoGenerado.length == 0) {
+                return;
+            }
+
+            Tramite actual = tramiteRepository.findById(tramiteId).orElse(null);
+            if (actual == null) {
+                return;
+            }
+
+            // Evita sobrescribir firma/estado con una entidad obsoleta cuando hay
+            // concurrencia entre pre-generacion y firma del alcalde.
+            actual.setContenidoPdfGenerado(contenidoGenerado);
+            actual.setNombrePdfGenerado(tramite.getNombrePdfGenerado());
+            actual.setMotorPdfGenerado(tramite.getMotorPdfGenerado());
+            actual.setHashDocumentoGenerado(calcularHashSha256(contenidoGenerado));
+            tramiteRepository.save(actual);
 
             long duracionMs = (System.nanoTime() - inicio) / 1_000_000;
             log.info("Pre-generación de certificado completada. Trámite={} duracion={}ms", tramiteId, duracionMs);

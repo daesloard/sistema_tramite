@@ -14,7 +14,7 @@ self.addEventListener('push', (event) => {
         url: payload?.url || data.url,
       };
     }
-  } catch (_) {
+  } catch {
     // keep fallback payload
   }
 
@@ -34,7 +34,7 @@ self.addEventListener('notificationclick', (event) => {
   const destino = event.notification?.data?.url || '/panel';
 
   event.waitUntil((async () => {
-    const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of allClients) {
       if ('focus' in client) {
         client.postMessage({ type: 'OPEN_NOTIFICATIONS_CENTER' });
@@ -45,8 +45,8 @@ self.addEventListener('notificationclick', (event) => {
         return;
       }
     }
-    if (clients.openWindow) {
-      await clients.openWindow(destino);
+    if (self.clients.openWindow) {
+      await self.clients.openWindow(destino);
     }
   })());
 });
