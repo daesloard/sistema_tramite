@@ -102,8 +102,6 @@ public class DocumentoGeneradoService {
     private static final java.math.BigInteger ESPACIO_FIRMA = java.math.BigInteger.ZERO;
     private static final String MARCADOR_FIRMA_ANGULAR = "<<firma.jpeg>>";
     private static final String MARCADOR_FIRMA_GUILLEMET = "«firma.jpeg»";
-    private static final int FIRMA_ANCHO_PX = 220;
-    private static final int FIRMA_ALTO_PX = 80;
     private static final int RECORTE_FIRMA_ANTES = 5;
     private static final int RECORTE_FIRMA_DESPUES = 4;
     private static final int RECORTE_PARRAFOS_VACIOS_ANTES = 4;
@@ -122,6 +120,10 @@ public class DocumentoGeneradoService {
     private final boolean gotenbergFallbackHabilitado;
     private final boolean forzarFuenteMavenPro;
     private final boolean ajustarEspaciadoPlantillaPdf;
+    private final boolean recortarParrafosVaciosFirma;
+    private final boolean compactarLayoutFirma;
+    private final int firmaAnchoPx;
+    private final int firmaAltoPx;
     private final boolean incluirDetalleFirmaEnPdf;
     private final boolean firmaDigitalHabilitada;
     private final String certificadoP12Path;
@@ -148,6 +150,10 @@ public class DocumentoGeneradoService {
                                     @Value("${app.pdf.gotenberg.fallback-enabled:true}") boolean gotenbergFallbackHabilitado,
                                     @Value("${app.pdf.enforce-maven-pro-font:false}") boolean forzarFuenteMavenPro,
                                     @Value("${app.pdf.adjust-template-spacing:false}") boolean ajustarEspaciadoPlantillaPdf,
+                                    @Value("${app.pdf.signature-trim-empty-paragraphs:false}") boolean recortarParrafosVaciosFirma,
+                                    @Value("${app.pdf.signature-compact-layout:false}") boolean compactarLayoutFirma,
+                                    @Value("${app.pdf.signature-image-width-px:170}") int firmaAnchoPx,
+                                    @Value("${app.pdf.signature-image-height-px:52}") int firmaAltoPx,
                                     @Value("${app.pdf.signature-annotation.enabled:false}") boolean incluirDetalleFirmaEnPdf,
                                     @Value("${app.pdf.digital-sign.enabled:true}") boolean firmaDigitalHabilitada,
                                     @Value("${app.pdf.digital-sign.p12-path:}") String certificadoP12Path,
@@ -163,6 +169,10 @@ public class DocumentoGeneradoService {
         this.gotenbergFallbackHabilitado = gotenbergFallbackHabilitado;
         this.forzarFuenteMavenPro = forzarFuenteMavenPro;
         this.ajustarEspaciadoPlantillaPdf = ajustarEspaciadoPlantillaPdf;
+        this.recortarParrafosVaciosFirma = recortarParrafosVaciosFirma;
+        this.compactarLayoutFirma = compactarLayoutFirma;
+        this.firmaAnchoPx = Math.max(40, firmaAnchoPx);
+        this.firmaAltoPx = Math.max(20, firmaAltoPx);
         this.incluirDetalleFirmaEnPdf = incluirDetalleFirmaEnPdf;
         this.firmaDigitalHabilitada = firmaDigitalHabilitada;
         this.certificadoP12Path = certificadoP12Path;
@@ -830,11 +840,8 @@ public class DocumentoGeneradoService {
         }
         for (XWPFRun run : paragraph.getRuns()) {
             if (run != null) {
-                // Si no hay variante bold real de Maven Pro, no forzamos la fuente en runs
-                // en negrita para preservar el peso visual definido en la plantilla.
-                if (run.isBold() && !mavenProBoldDisponible) {
-                    continue;
-                }
+                // Forzar Maven Pro en todos los runs, incluidos los de negrita,
+                // para garantizar uniformidad tipográfica en aprobados y rechazados.
                 run.setFontFamily(FUENTE_MAVEN_PRO);
             }
         }
@@ -945,8 +952,9 @@ public class DocumentoGeneradoService {
 
         boolean esHaceConstar = textoLower.contains("hace constar");
         if (esHaceConstar) {
-            // Ajuste visual solicitado: reducir separación entre "HACE CONSTAR" y el cuerpo.
-            spacing.setAfter(ESPACIO_UNO);
+            // Ajuste visual solicitado: reducir separación antes y después de "HACE CONSTAR".
+            spacing.setBefore(java.math.BigInteger.ZERO);
+            spacing.setAfter(java.math.BigInteger.ZERO);
             return true;
         }
 
@@ -959,17 +967,17 @@ public class DocumentoGeneradoService {
 
         if (indiceParrafoPrincipal == 0) {
             spacing.setBefore(ESPACIO_UNO);
-            spacing.setAfter(ESPACIO_DOS);
+            spacing.setAfter(ESPACIO_UNO);
             return true;
         }
 
         if (indiceParrafoPrincipal == 1) {
-            spacing.setAfter(ESPACIO_DOS);
+            spacing.setAfter(ESPACIO_UNO);
             return true;
         }
 
         if (indiceParrafoPrincipal >= 2 && indiceParrafoPrincipal <= 4) {
-            spacing.setAfter(ESPACIO_UNO);
+            spacing.setAfter(java.math.BigInteger.ZERO);
             return true;
         }
 
@@ -1234,11 +1242,13 @@ public class DocumentoGeneradoService {
     }
 
     private void insertarFirmaEnDocumento(XWPFDocument document, Tramite tramite) {
-        recortarParrafosVaciosAlrededorDeFirma(
-            document,
-            RECORTE_PARRAFOS_VACIOS_ANTES,
-            RECORTE_PARRAFOS_VACIOS_DESPUES
-        );
+        if (recortarParrafosVaciosFirma) {
+            recortarParrafosVaciosAlrededorDeFirma(
+                document,
+                RECORTE_PARRAFOS_VACIOS_ANTES,
+                RECORTE_PARRAFOS_VACIOS_DESPUES
+            );
+        }
 
         for (XWPFParagraph paragraph : document.getParagraphs()) {
             insertarFirmaEnParrafo(paragraph, document, tramite);
@@ -1285,6 +1295,8 @@ public class DocumentoGeneradoService {
             return;
         }
 
+        XWPFRun runEstiloBase = paragraph.getRuns().get(0);
+
         StringBuilder textoParrafo = new StringBuilder();
         for (XWPFRun run : paragraph.getRuns()) {
             String textoRun = run.getText(0);
@@ -1308,18 +1320,24 @@ public class DocumentoGeneradoService {
         }
 
         String antes = original.substring(0, original.indexOf(marcador));
-        antes = reducirEspacioPrevioFirma(antes, RECORTE_FIRMA_ANTES);
         String despues = original.substring(original.indexOf(marcador) + marcador.length());
-        despues = reducirEspacioPosteriorFirma(despues, RECORTE_FIRMA_DESPUES);
+
+        if (compactarLayoutFirma) {
+            antes = reducirEspacioPrevioFirma(antes, RECORTE_FIRMA_ANTES);
+            despues = reducirEspacioPosteriorFirma(despues, RECORTE_FIRMA_DESPUES);
+        }
 
         while (!paragraph.getRuns().isEmpty()) {
             paragraph.removeRun(0);
         }
 
-        compactarParrafoFirma(paragraph);
+        if (compactarLayoutFirma) {
+            compactarParrafoFirma(paragraph);
+        }
 
         if (!antes.isBlank()) {
             XWPFRun runAntes = paragraph.createRun();
+            copiarFormatoRun(runEstiloBase, runAntes);
             runAntes.setText(antes);
         }
 
@@ -1331,18 +1349,20 @@ public class DocumentoGeneradoService {
                         firmaInputStream,
                         XWPFDocument.PICTURE_TYPE_JPEG,
                         "firma.jpeg",
-                        Units.toEMU(FIRMA_ANCHO_PX),
-                        Units.toEMU(FIRMA_ALTO_PX)
+                        Units.toEMU(firmaAnchoPx),
+                        Units.toEMU(firmaAltoPx)
                 );
             }
         } catch (Exception ex) {
             logger.warn("No fue posible insertar la firma desde templates/firma.jpeg: {}", ex.getMessage());
             XWPFRun runFallback = paragraph.createRun();
+            copiarFormatoRun(runEstiloBase, runFallback);
             runFallback.setText("[firma no disponible]");
         }
 
         if (!despues.isBlank()) {
             XWPFRun runDespues = paragraph.createRun();
+            copiarFormatoRun(runEstiloBase, runDespues);
             runDespues.setText(despues);
         }
 
