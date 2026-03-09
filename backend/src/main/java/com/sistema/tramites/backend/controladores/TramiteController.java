@@ -12,6 +12,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -520,11 +521,13 @@ public class TramiteController {
                 }
 
             if (tramite.getFirmaAlcalde() != null && !tramite.getFirmaAlcalde().isBlank()) {
+                long duracionRecuperacion = procesarPostFirmaConFallback(tramite, usuarioAlcalde.getId(), "firma_reintentada");
                 var respuesta = new java.util.HashMap<String, Object>();
                 respuesta.put("tramiteId", tramite.getId());
                 respuesta.put("numeroRadicado", tramite.getNumeroRadicado());
                 respuesta.put("estado", tramite.getEstado() != null ? tramite.getEstado().name() : null);
                 respuesta.put("fechaFirmaAlcalde", tramite.getFechaFirmaAlcalde());
+                respuesta.put("duracionReintentoPostFirmaMs", duracionRecuperacion);
                 respuesta.put("mensaje", "La firma ya fue registrada y el certificado está terminando de procesarse.");
                 return ResponseEntity.status(HttpStatus.ACCEPTED).body(respuesta);
             }
@@ -550,9 +553,7 @@ public class TramiteController {
                 actualizado.getEstado()
             );
 
-            long inicioPostFirma = System.nanoTime();
-            certificadoPostFirmaAsyncService.procesarPostFirma(actualizado.getId());
-            long duracionProgramacionPostFirma = millisDesde(inicioPostFirma);
+            long duracionProgramacionPostFirma = procesarPostFirmaConFallback(actualizado, usuarioAlcalde.getId(), "firma_inicial");
 
             long inicioNotificacionInterna = System.nanoTime();
             firmaAlcaldeAsyncService.notificarFirmaInterna(
@@ -1161,6 +1162,27 @@ public class TramiteController {
 
     private long millisDesde(long inicioNano) {
         return (System.nanoTime() - inicioNano) / 1_000_000;
+    }
+
+    private long procesarPostFirmaConFallback(Tramite tramite, Long usuarioAlcaldeId, String contexto) {
+        long inicio = System.nanoTime();
+        try {
+            certificadoPostFirmaAsyncService.procesarPostFirma(tramite.getId());
+            return millisDesde(inicio);
+        } catch (TaskRejectedException | IllegalStateException ex) {
+            log.warn("Post-firma async rechazada para trámite {} (contexto={}): {}. Se ejecuta fallback sincrónico.",
+                    tramite.getId(), contexto, ex.getMessage());
+            auditoriaTramiteService.registrarEventoInmediato(
+                    tramite.getId(),
+                    usuarioAlcaldeId,
+                    "POST_FIRMA_FALLBACK_SYNC",
+                    "Post-firma async no disponible en contexto " + contexto + ". Se ejecuta procesamiento inmediato.",
+                    tramite.getEstado(),
+                    tramite.getEstado()
+            );
+            certificadoPostFirmaAsyncService.procesarPostFirmaInmediato(tramite.getId());
+            return millisDesde(inicio);
+        }
     }
 
     private void subirCertificadoGeneradoADrive(Tramite tramite) throws IOException {

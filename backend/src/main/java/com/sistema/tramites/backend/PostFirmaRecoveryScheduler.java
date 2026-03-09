@@ -54,12 +54,12 @@ public class PostFirmaRecoveryScheduler {
 
         for (Tramite tramite : pendientes) {
             try {
-                certificadoPostFirmaAsyncService.procesarPostFirma(tramite.getId());
+            certificadoPostFirmaAsyncService.procesarPostFirmaInmediato(tramite.getId());
                 auditoriaTramiteService.registrarEventoInmediato(
                         tramite.getId(),
                         null,
                         "POST_FIRMA_RECOVERY_ENCOLADA",
-                        "Recuperador encoló post-firma pendiente para radicado " + tramite.getNumeroRadicado(),
+                "Recuperador ejecutó post-firma pendiente para radicado " + tramite.getNumeroRadicado(),
                         tramite.getEstado(),
                         tramite.getEstado()
                 );

@@ -39,6 +39,14 @@ public class CertificadoPostFirmaAsyncService {
 
     @Async("pdfTaskExecutor")
     public void procesarPostFirma(Long tramiteId) {
+        procesarPostFirmaInterno(tramiteId, "async");
+    }
+
+    public void procesarPostFirmaInmediato(Long tramiteId) {
+        procesarPostFirmaInterno(tramiteId, "sync-fallback");
+    }
+
+    private void procesarPostFirmaInterno(Long tramiteId, String modoEjecucion) {
         if (tramiteId == null) {
             return;
         }
@@ -57,7 +65,7 @@ public class CertificadoPostFirmaAsyncService {
                     tramite.getId(),
                     null,
                     "POST_FIRMA_INICIADA",
-                    "Inicio de post-firma para radicado " + tramite.getNumeroRadicado(),
+                    "Inicio de post-firma (" + modoEjecucion + ") para radicado " + tramite.getNumeroRadicado(),
                     tramite.getEstado(),
                     tramite.getEstado()
             );
@@ -162,16 +170,16 @@ public class CertificadoPostFirmaAsyncService {
             }
 
             long duracionMs = (System.nanoTime() - inicio) / 1_000_000;
-            log.info("Post-firma asíncrona completada. Trámite={} duracion={}ms", tramiteId, duracionMs);
+                log.info("Post-firma completada. Trámite={} modo={} duracion={}ms", tramiteId, modoEjecucion, duracionMs);
         } catch (Exception ex) {
             outcome = "exception";
             long duracionMs = (System.nanoTime() - inicio) / 1_000_000;
-            log.warn("Falló post-firma asíncrona para trámite {} tras {}ms: {}", tramiteId, duracionMs, ex.getMessage());
+                log.warn("Falló post-firma para trámite {} (modo={}) tras {}ms: {}", tramiteId, modoEjecucion, duracionMs, ex.getMessage());
             auditoriaTramiteService.registrarEventoInmediato(
                     tramiteId,
                     null,
                     "POST_FIRMA_ERROR",
-                    "Error durante post-firma de trámite " + tramiteId + ": " + ex.getMessage(),
+                    "Error durante post-firma (" + modoEjecucion + ") de trámite " + tramiteId + ": " + ex.getMessage(),
                     null,
                     null
             );
@@ -180,6 +188,7 @@ public class CertificadoPostFirmaAsyncService {
             Timer.builder("tramites.postfirma.duration")
                     .description("Duracion de procesamiento post-firma")
                     .tag("outcome", outcome)
+                    .tag("mode", modoEjecucion)
                     .register(meterRegistry)
                     .record(duracionNanos, TimeUnit.NANOSECONDS);
 
