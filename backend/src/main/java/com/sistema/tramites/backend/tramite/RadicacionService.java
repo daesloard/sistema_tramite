@@ -56,7 +56,7 @@ public class RadicacionService {
     public Map<String, Object> radicacionCertificadoResidencia(SolicitudCertificadoResidenciaDTO solicitud) {
         Tramite tramite = new Tramite();
         tramite.setNumeroRadicado(tramiteUtils.generarRadicado());
-        tramite.setNombreSolicitante(solicitud.getNombre() != null ? solicitud.getNombre().trim().toUpperCase(new Locale("es", "CO")) : null);
+        tramite.setNombreSolicitante(solicitud.getNombre() != null ? solicitud.getNombre().trim().toUpperCase(Locale.of("es", "CO")) : null);
         tramite.setTipoTramite("CERTIFICADO_RESIDENCIA");
         tramite.setFechaRadicacion(LocalDateTime.now());
         tramite.setEstado(EstadoTramite.RADICADO);

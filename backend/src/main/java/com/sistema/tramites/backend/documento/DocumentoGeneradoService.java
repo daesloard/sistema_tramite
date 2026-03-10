@@ -1,6 +1,13 @@
 package com.sistema.tramites.backend.documento;
 
-import com.lowagie.text.Document;
+import com.spire.doc.Document;
+import com.spire.doc.FileFormat;
+import com.spire.doc.Section;
+import com.spire.doc.documents.Paragraph;
+import com.spire.doc.fields.DocPicture;
+import com.spire.pdf.PdfDocument;
+import com.spire.pdf.security.PdfEncryptionKeySize;
+import com.spire.pdf.security.PdfPermissionsFlags;
 import com.sistema.tramites.backend.tramite.Tramite;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -14,13 +21,17 @@ import org.slf4j.LoggerFactory;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.security.PrivateKey;
 import java.security.Security;
 import java.security.cert.Certificate;
 import java.time.LocalDateTime;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.time.format.TextStyle;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 @Service
 public class DocumentoGeneradoService {
     private static final Locale LOCALE_ES = new Locale("es", "CO");
@@ -148,12 +159,12 @@ public class DocumentoGeneradoService {
         String nombrePlantilla = obtenerNombrePlantilla(tramite, aprobado);
         Resource resource = resourceLoader.getResource("classpath:templates/" + nombrePlantilla);
         try (InputStream inputStream = resource.getInputStream()) {
-            com.spire.doc.Document document = new com.spire.doc.Document();
-            document.loadFromStream(inputStream, com.spire.doc.FileFormat.Docx);
+            Document document = new Document();
+            document.loadFromStream(inputStream, FileFormat.Docx);
             reemplazarMarcadoresEnSpireDoc(document, tramite, observacion);
             insertarFirmaEnSpireDoc(document, tramite);
             ByteArrayOutputStream pdfOutput = new ByteArrayOutputStream();
-            document.saveToStream(pdfOutput, com.spire.doc.FileFormat.PDF);
+            document.saveToStream(pdfOutput, FileFormat.PDF);
             return new PdfGeneracionResultado(pdfOutput.toByteArray(), "spire.doc");
         } catch (Exception e) {
             throw new IllegalStateException("Error generando PDF con Spire.Doc: " + e.getMessage(), e);
@@ -165,8 +176,39 @@ public class DocumentoGeneradoService {
             document.replace(marcador.regex(), marcador.valor() != null ? marcador.valor() : "", true, true);
         }
     }
-    private void insertarFirmaEnSpireDoc(com.spire.doc.Document document, Tramite tramite) {
-        // Lógica para insertar imagen de firma si existe
+    private void insertarFirmaEnSpireDoc(Document document, Tramite tramite) {
+        try {
+            Resource firmaRes = resourceLoader.getResource("classpath:templates/firma.jpeg");
+            if (firmaRes.exists()) {
+                Section section = document.getSections().get(0);
+                boolean firmaInsertada = false;
+                
+                // Buscamos el marcador «firma» o el nombre del alcalde para posicionar
+                for (int i = 0; i < section.getParagraphs().getCount(); i++) {
+                    Paragraph p = section.getParagraphs().get(i);
+                    String text = p.getText();
+                    if (text.contains("«firma»") || text.contains("ALCALDE")) {
+                        p.replace("«firma»", "", true, true);
+                        DocPicture picture = p.appendPicture(firmaRes.getInputStream());
+                        picture.setWidth(130f);
+                        picture.setHeight(50f);
+                        firmaInsertada = true;
+                        logger.info("Firma del alcalde insertada en marcador/nombre para radicado {}", tramite.getNumeroRadicado());
+                        break;
+                    }
+                }
+                
+                if (!firmaInsertada) {
+                    Paragraph lastPara = section.addParagraph();
+                    DocPicture picture = lastPara.appendPicture(firmaRes.getInputStream());
+                    picture.setWidth(130f);
+                    picture.setHeight(50f);
+                    logger.info("Firma del alcalde insertada al final para radicado {}", tramite.getNumeroRadicado());
+                }
+            }
+        } catch (Exception e) {
+            logger.error("No se pudo insertar la firma en el documento: {}", e.getMessage());
+        }
     }
     private String generarNombrePdf(Tramite tramite, boolean aprobado) {
         String prefijo = aprobado ? "CERTIFICADO_RESIDENCIA_" : "RESPUESTA_NEGATIVA_";
@@ -200,8 +242,25 @@ public class DocumentoGeneradoService {
         );
     }
     private byte[] protegerPdfContraEdicionYCopia(byte[] pdfOriginal, Tramite tramite) {
-        // Implementación simplificada (actualizar según necesidad)
-        return pdfOriginal;
+        try (ByteArrayInputStream is = new ByteArrayInputStream(pdfOriginal);
+             ByteArrayOutputStream os = new ByteArrayOutputStream()) {
+            
+            PdfDocument pdf = new PdfDocument();
+            pdf.loadFromStream(is);
+            
+            // Permitir impresión, prohibir copia y modificación
+            String password = "admin_" + tramite.getNumeroRadicado();
+            pdf.getSecurity().encrypt(null, password, 
+                EnumSet.of(PdfPermissionsFlags.Print, PdfPermissionsFlags.Default), 
+                PdfEncryptionKeySize.Key_128_Bit);
+            
+            pdf.saveToStream(os);
+            logger.info("PDF protegido contra edición y copia para radicado {}", tramite.getNumeroRadicado());
+            return os.toByteArray();
+        } catch (Exception e) {
+            logger.error("Error al proteger el PDF: {}", e.getMessage());
+            return pdfOriginal;
+        }
     }
     private byte[] firmarPdfDigitalmente(byte[] pdfOriginal, Tramite tramite) {
         // Lógica de firma digital (P12)

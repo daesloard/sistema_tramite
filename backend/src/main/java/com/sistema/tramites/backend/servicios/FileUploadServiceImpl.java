@@ -19,8 +19,12 @@ import com.sistema.tramites.backend.documento.DriveStorageService;
 import com.sistema.tramites.backend.notificacion.NotificacionUsuarioService;
 import com.sistema.tramites.backend.tramite.Tramite;
 import com.sistema.tramites.backend.tramite.TramiteRepository;
+import com.sistema.tramites.backend.usuario.Usuario;
+import com.sistema.tramites.backend.usuario.RolUsuario;
 import com.sistema.tramites.backend.usuario.UsuarioRepository;
 import com.sistema.tramites.backend.util.EmailService;
+import com.sistema.tramites.backend.controladores.FileUploadController.VerificacionDocumentosDTO;
+import com.sistema.tramites.backend.controladores.FileUploadController.DocumentoStatusDTO;
 
 @Service
 public class FileUploadServiceImpl implements FileUploadService {
@@ -226,10 +230,10 @@ public class FileUploadServiceImpl implements FileUploadService {
             }
 
             Tramite tramite = tramiteOpt.get();
-            com.sistema.tramites.backend.controladores.FileUploadController.VerificacionDocumentosDTO verificacion = new com.sistema.tramites.backend.controladores.FileUploadController.VerificacionDocumentosDTO();
+            VerificacionDocumentosDTO verificacion = new VerificacionDocumentosDTO();
             
             String rutaIdentidad = tramite.getRuta_documento_identidad();
-            verificacion.identidad = new com.sistema.tramites.backend.controladores.FileUploadController.DocumentoStatusDTO(
+            verificacion.identidad = new DocumentoStatusDTO(
                     tieneContenidoOStorage(tramite.getContenidoDocumentoIdentidad(), rutaIdentidad),
                     tramite.getNombreArchivoIdentidad(),
                     tramite.getTipoContenidoIdentidad(),
@@ -239,7 +243,7 @@ public class FileUploadServiceImpl implements FileUploadService {
             );
 
             String rutaSolicitud = tramite.getRuta_documento_solicitud();
-            verificacion.solicitud = new com.sistema.tramites.backend.controladores.FileUploadController.DocumentoStatusDTO(
+            verificacion.solicitud = new DocumentoStatusDTO(
                     tieneContenidoOStorage(tramite.getContenidoDocumentoSolicitud(), rutaSolicitud),
                     tramite.getNombreArchivoSolicitud(),
                     tramite.getTipoContenidoSolicitud(),
@@ -249,7 +253,7 @@ public class FileUploadServiceImpl implements FileUploadService {
             );
 
             String rutaSisben = tramite.getRuta_certificado_sisben();
-            verificacion.sisben = new com.sistema.tramites.backend.controladores.FileUploadController.DocumentoStatusDTO(
+            verificacion.sisben = new DocumentoStatusDTO(
                     tieneContenidoOStorage(tramite.getContenidoCertificadoSisben(), rutaSisben),
                     tramite.getNombreArchivoSisben(),
                     tramite.getTipoContenidoSisben(),
@@ -259,7 +263,7 @@ public class FileUploadServiceImpl implements FileUploadService {
             );
 
             String rutaElectoral = tramite.getRuta_certificado_electoral();
-            verificacion.electoral = new com.sistema.tramites.backend.controladores.FileUploadController.DocumentoStatusDTO(
+            verificacion.electoral = new DocumentoStatusDTO(
                     tieneContenidoOStorage(tramite.getContenidoCertificadoElectoral(), rutaElectoral),
                     tramite.getNombreArchivoElectoral(),
                     tramite.getTipoContenidoElectoral(),
@@ -269,7 +273,7 @@ public class FileUploadServiceImpl implements FileUploadService {
             );
 
             String rutaResidencia = tramite.getRuta_certificado();
-            verificacion.residencia = new com.sistema.tramites.backend.controladores.FileUploadController.DocumentoStatusDTO(
+            verificacion.residencia = new DocumentoStatusDTO(
                     tieneContenidoOStorage(tramite.getContenidoDocumentoResidencia(), rutaResidencia),
                     tramite.getNombreArchivoResidencia(),
                     tramite.getTipoContenidoResidencia(),
@@ -323,13 +327,13 @@ public class FileUploadServiceImpl implements FileUploadService {
                 if (map.get("mensaje") != null) mensaje = map.get("mensaje").toString();
             }
 
-            java.util.List<com.sistema.tramites.backend.usuario.Usuario> admins = usuarioRepository.findAllByRolAndActivoTrue(com.sistema.tramites.backend.usuario.RolUsuario.ADMINISTRADOR);
+            List<Usuario> admins = usuarioRepository.findAllByRolAndActivoTrue(RolUsuario.ADMINISTRADOR);
             if (admins.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("❌ No hay administradores activos");
 
-            String[] correos = admins.stream().map(com.sistema.tramites.backend.usuario.Usuario::getEmail).filter(Objects::nonNull).toArray(String[]::new);
+            String[] correos = admins.stream().map(Usuario::getEmail).filter(Objects::nonNull).toArray(String[]::new);
             
             String claveCertificado = resolverClaveCertificado(tramite.getTipo_certificado());
-            java.util.List<String> faltantes = new java.util.ArrayList<>();
+            List<String> faltantes = new ArrayList<>();
             if (!tieneContenidoOStorage(tramite.getContenidoDocumentoIdentidad(), tramite.getRuta_documento_identidad())) faltantes.add("Identidad");
             if (!tieneContenidoOStorage(tramite.getContenidoDocumentoSolicitud(), tramite.getRuta_documento_solicitud())) faltantes.add("Solicitud");
             if (!documentoCertificadoCargado(tramite, claveCertificado)) faltantes.add("Certificado " + claveCertificado);
