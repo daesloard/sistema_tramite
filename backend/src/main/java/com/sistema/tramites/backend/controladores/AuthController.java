@@ -1,6 +1,6 @@
 package com.sistema.tramites.backend.controladores;
 
-import com.sistema.tramites.backend.*;
+
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +13,13 @@ import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
 import java.util.List;
 import java.util.Optional;
+import com.sistema.tramites.backend.auth.AuthResponseDTO;
+import com.sistema.tramites.backend.auth.JwtService;
+import com.sistema.tramites.backend.auth.LoginDTO;
+import com.sistema.tramites.backend.usuario.RolUsuario;
+import com.sistema.tramites.backend.usuario.Usuario;
+import com.sistema.tramites.backend.usuario.UsuarioOperativoUpdateDTO;
+import com.sistema.tramites.backend.usuario.UsuarioRepository;
 
 @RestController
 @RequestMapping("/api/auth")

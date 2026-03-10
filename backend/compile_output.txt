@@ -1,0 +1,237 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------< com.sistema.tramites:backend >--------------------
+[INFO] Building backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ backend ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 24 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.14.0:compile (default-compile) @ backend ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 58 source files with javac [debug parameters release 21] to target\classes
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[6,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[8,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[9,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[10,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[11,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[12,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[13,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[14,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[76,21] invalid method declaration; return type required
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[76,82] <identifier> expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[85,17] implicitly declared classes are not supported in -source 21
+  (use -source 25 or higher to enable implicitly declared classes)
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[86,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[97,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[108,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[119,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[128,17] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[130,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[131,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[132,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[136,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[137,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[140,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[141,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[142,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[144,17] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[150,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[161,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[163,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[166,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[465,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[1,1] compact source file should not have package declaration
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[28,17] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[33,13] implicitly declared classes are not supported in -source 21
+  (use -source 25 or higher to enable implicitly declared classes)
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[40,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[41,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[42,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[43,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[44,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[46,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[52,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[53,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[55,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[63,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[70,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[739,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[744,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[748,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[753,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[756,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[762,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[765,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[774,17] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[777,17] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[785,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[789,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[795,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[799,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[800,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[801,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[806,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[813,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[818,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[833,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[859,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[876,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[893,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[900,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[903,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[905,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[914,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[917,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[918,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[919,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[921,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[932,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[944,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[945,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[946,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[948,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[953,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[957,22] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[960,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[963,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[970,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[976,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1005,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1011,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1015,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1024,5] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1029,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1034,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1036,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1037,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1042,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1069,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1073,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1074,5] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1078,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1083,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1125,5] class, interface, enum, or record expected
+[INFO] 100 errors 
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  2.101 s
+[INFO] Finished at: 2026-03-10T12:19:39-05:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.14.0:compile (default-compile) on project backend: Compilation failure: Compilation failure: 
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[6,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[8,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[9,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[10,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[11,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[12,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[13,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[14,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[76,21] invalid method declaration; return type required
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[76,82] <identifier> expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[85,17] implicitly declared classes are not supported in -source 21
+[ERROR]   (use -source 25 or higher to enable implicitly declared classes)
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[86,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[97,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[108,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[119,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[128,17] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[130,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[131,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[132,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[136,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[137,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[140,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[141,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[142,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[144,17] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[150,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[161,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[163,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[166,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[465,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/FileUploadController.java:[1,1] compact source file should not have package declaration
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[28,17] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[33,13] implicitly declared classes are not supported in -source 21
+[ERROR]   (use -source 25 or higher to enable implicitly declared classes)
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[40,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[41,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[42,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[43,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[44,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[46,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[52,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[53,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[55,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[63,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[70,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[739,1] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[744,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[748,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[753,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[756,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[762,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[765,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[774,17] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[777,17] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[785,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[789,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[795,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[799,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[800,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[801,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[806,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[813,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[818,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[833,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[859,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[876,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[893,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[900,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[903,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[905,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[914,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[917,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[918,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[919,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[921,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[932,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[944,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[945,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[946,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[948,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[953,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[957,22] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[960,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[963,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[970,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[976,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1005,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1011,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1015,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1024,5] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1029,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1034,13] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1036,13] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1037,9] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1042,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1069,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1073,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1074,5] class, interface, enum, or record expected
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1078,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1083,9] statements not expected outside of methods and initializers
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/documento/EtapaPdfSupplier.java:[1125,5] class, interface, enum, or record expected
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

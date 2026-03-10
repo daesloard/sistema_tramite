@@ -1,12 +1,12 @@
 package com.sistema.tramites.backend.controladores;
 
-import com.sistema.tramites.backend.NotificacionUsuario;
-import com.sistema.tramites.backend.NotificacionUsuarioService;
-import com.sistema.tramites.backend.Usuario;
-import com.sistema.tramites.backend.UsuarioRepository;
-import com.sistema.tramites.backend.WebPushService;
-import com.sistema.tramites.backend.WebPushSubscribeRequestDTO;
-import com.sistema.tramites.backend.WebPushUnsubscribeRequestDTO;
+import com.sistema.tramites.backend.notificacion.NotificacionUsuario;
+import com.sistema.tramites.backend.notificacion.NotificacionUsuarioService;
+import com.sistema.tramites.backend.usuario.Usuario;
+import com.sistema.tramites.backend.usuario.UsuarioRepository;
+import com.sistema.tramites.backend.notificacion.WebPushService;
+import com.sistema.tramites.backend.notificacion.WebPushSubscribeRequestDTO;
+import com.sistema.tramites.backend.notificacion.WebPushUnsubscribeRequestDTO;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;

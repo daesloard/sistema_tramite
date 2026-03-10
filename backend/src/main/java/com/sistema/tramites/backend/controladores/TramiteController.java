@@ -1,6 +1,6 @@
 package com.sistema.tramites.backend.controladores;
 
-import com.sistema.tramites.backend.*;
+
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -17,14 +17,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import com.sistema.tramites.backend.TramiteService;
-import com.sistema.tramites.backend.Tramite;
-import com.sistema.tramites.backend.EstadoTramite;
-import com.sistema.tramites.backend.SolicitudCertificadoResidenciaDTO;
-import com.sistema.tramites.backend.VerificacionSolicitudDTO;
-import com.sistema.tramites.backend.NotificacionVerificadorAdminDTO;
-import com.sistema.tramites.backend.FirmaAlcaldeDTO;
-import com.sistema.tramites.backend.DocumentoDescargaDTO;
+import com.sistema.tramites.backend.tramite.TramiteService;
+import com.sistema.tramites.backend.tramite.Tramite;
+import com.sistema.tramites.backend.tramite.EstadoTramite;
+import com.sistema.tramites.backend.tramite.dto.SolicitudCertificadoResidenciaDTO;
+import com.sistema.tramites.backend.tramite.dto.VerificacionSolicitudDTO;
+import com.sistema.tramites.backend.tramite.dto.NotificacionVerificadorAdminDTO;
+import com.sistema.tramites.backend.tramite.dto.FirmaAlcaldeDTO;
+import com.sistema.tramites.backend.tramite.dto.DocumentoDescargaDTO;
 
 @RestController
 @RequestMapping("/api/tramites")
