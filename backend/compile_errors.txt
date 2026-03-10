@@ -1,0 +1,83 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------< com.sistema.tramites:backend >--------------------
+[INFO] Building backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ backend ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 24 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.14.0:compile (default-compile) @ backend ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 63 source files with javac [debug parameters release 21] to target\classes
+[INFO] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/tramite/RadicacionService.java: Some input files use or override a deprecated API.
+[INFO] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/tramite/RadicacionService.java: Recompile with -Xlint:deprecation for details.
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/TramiteController.java:[167,29] cannot find symbol
+  symbol:   variable HttpHeaders
+  location: class com.sistema.tramites.backend.controladores.TramiteController
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/TramiteController.java:[166,29] cannot find symbol
+  symbol:   variable HttpHeaders
+  location: class com.sistema.tramites.backend.controladores.TramiteController
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/TramiteController.java:[206,29] cannot find symbol
+  symbol:   variable HttpHeaders
+  location: class com.sistema.tramites.backend.controladores.TramiteController
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/TramiteController.java:[207,34] cannot find symbol
+  symbol:   variable MediaType
+  location: class com.sistema.tramites.backend.controladores.TramiteController
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/tramite/CertificadoQueryService.java:[206,51] cannot find symbol
+  symbol:   method generarTextoDocumento(com.sistema.tramites.backend.tramite.Tramite,boolean,java.lang.String)
+  location: variable documentoGeneradoService of type com.sistema.tramites.backend.documento.DocumentoGeneradoService
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/tramite/CertificadoQueryService.java:[207,46] cannot find symbol
+  symbol:   method generarHtmlDocumento(com.sistema.tramites.backend.tramite.Tramite,boolean,java.lang.String)
+  location: variable documentoGeneradoService of type com.sistema.tramites.backend.documento.DocumentoGeneradoService
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/tramite/CertificadoQueryService.java:[220,60] cannot find symbol
+  symbol:   method obtenerNombrePlantillaDocumento(com.sistema.tramites.backend.tramite.Tramite,boolean)
+  location: variable documentoGeneradoService of type com.sistema.tramites.backend.documento.DocumentoGeneradoService
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/servicios/FileUploadServiceImpl.java:[74,59] cannot find symbol
+  symbol:   method obtenerOCrearCarpetaDrive(com.sistema.tramites.backend.tramite.Tramite)
+  location: variable driveStorageService of type com.sistema.tramites.backend.documento.DriveStorageService
+[INFO] 8 errors 
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  3.678 s
+[INFO] Finished at: 2026-03-10T12:40:07-05:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.14.0:compile (default-compile) on project backend: Compilation failure: Compilation failure: 
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/TramiteController.java:[167,29] cannot find symbol
+[ERROR]   symbol:   variable HttpHeaders
+[ERROR]   location: class com.sistema.tramites.backend.controladores.TramiteController
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/TramiteController.java:[166,29] cannot find symbol
+[ERROR]   symbol:   variable HttpHeaders
+[ERROR]   location: class com.sistema.tramites.backend.controladores.TramiteController
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/TramiteController.java:[206,29] cannot find symbol
+[ERROR]   symbol:   variable HttpHeaders
+[ERROR]   location: class com.sistema.tramites.backend.controladores.TramiteController
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/controladores/TramiteController.java:[207,34] cannot find symbol
+[ERROR]   symbol:   variable MediaType
+[ERROR]   location: class com.sistema.tramites.backend.controladores.TramiteController
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/tramite/CertificadoQueryService.java:[206,51] cannot find symbol
+[ERROR]   symbol:   method generarTextoDocumento(com.sistema.tramites.backend.tramite.Tramite,boolean,java.lang.String)
+[ERROR]   location: variable documentoGeneradoService of type com.sistema.tramites.backend.documento.DocumentoGeneradoService
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/tramite/CertificadoQueryService.java:[207,46] cannot find symbol
+[ERROR]   symbol:   method generarHtmlDocumento(com.sistema.tramites.backend.tramite.Tramite,boolean,java.lang.String)
+[ERROR]   location: variable documentoGeneradoService of type com.sistema.tramites.backend.documento.DocumentoGeneradoService
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/tramite/CertificadoQueryService.java:[220,60] cannot find symbol
+[ERROR]   symbol:   method obtenerNombrePlantillaDocumento(com.sistema.tramites.backend.tramite.Tramite,boolean)
+[ERROR]   location: variable documentoGeneradoService of type com.sistema.tramites.backend.documento.DocumentoGeneradoService
+[ERROR] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/servicios/FileUploadServiceImpl.java:[74,59] cannot find symbol
+[ERROR]   symbol:   method obtenerOCrearCarpetaDrive(com.sistema.tramites.backend.tramite.Tramite)
+[ERROR]   location: variable driveStorageService of type com.sistema.tramites.backend.documento.DriveStorageService
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

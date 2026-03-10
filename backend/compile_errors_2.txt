@@ -1,0 +1,22 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------< com.sistema.tramites:backend >--------------------
+[INFO] Building backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ backend ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 24 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.14.0:compile (default-compile) @ backend ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 63 source files with javac [debug parameters release 21] to target\classes
+[INFO] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/tramite/RadicacionService.java: Some input files use or override a deprecated API.
+[INFO] /C:/Users/daesloard/Downloads/sistema_tramites/backend/src/main/java/com/sistema/tramites/backend/tramite/RadicacionService.java: Recompile with -Xlint:deprecation for details.
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  4.225 s
+[INFO] Finished at: 2026-03-10T12:41:01-05:00
+[INFO] ------------------------------------------------------------------------

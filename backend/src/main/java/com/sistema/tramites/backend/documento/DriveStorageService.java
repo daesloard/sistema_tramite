@@ -45,6 +45,16 @@ public class DriveStorageService {
         return driveEnabled && credentialsJsonBase64 != null && !credentialsJsonBase64.isBlank();
     }
 
+    public String obtenerOCrearCarpetaDrive(com.sistema.tramites.backend.tramite.Tramite tramite) throws IOException {
+        if (tramite.getDriveFolderId() != null && !tramite.getDriveFolderId().isBlank()) {
+            return tramite.getDriveFolderId();
+        }
+        int year = tramite.getFechaRadicacion() != null ? tramite.getFechaRadicacion().getYear() : java.time.Year.now().getValue();
+        String folderId = createSolicitudFolderByDocumento(tramite.getNumeroDocumento(), year);
+        tramite.setDriveFolderId(folderId);
+        return folderId;
+    }
+
     public Map<String, Object> getDiagnostics() {
         Map<String, Object> diagnostics = new HashMap<>();
         diagnostics.put("driveEnabledFlag", driveEnabled);
