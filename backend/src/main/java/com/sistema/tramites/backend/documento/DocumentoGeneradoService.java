@@ -32,6 +32,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import com.spire.doc.interfaces.ITextRange;
+
 @Service
 public class DocumentoGeneradoService {
     private static final Locale LOCALE_ES = new Locale("es", "CO");
@@ -163,10 +165,25 @@ public class DocumentoGeneradoService {
             document.loadFromStream(inputStream, FileFormat.Docx);
             reemplazarMarcadoresEnSpireDoc(document, tramite, observacion);
             insertarFirmaEnSpireDoc(document, tramite);
+            // Forzar la fuente 'Maven Pro' en todos los textos de todos los párrafos de todas las secciones
+            for (int s = 0; s < document.getSections().getCount(); s++) {
+                Section section = document.getSections().get(s);
+                for (int p = 0; p < section.getParagraphs().getCount(); p++) {
+                    Paragraph para = section.getParagraphs().get(p);
+                    for (int t = 0; t < para.getChildObjects().getCount(); t++) {
+                        Object obj = para.getChildObjects().get(t);
+                        if (obj instanceof ITextRange) {
+                            ITextRange textRange = (ITextRange) obj;
+                            textRange.getCharacterFormat().setFontName("Maven Pro");
+                        }
+                    }
+                }
+            }
             ByteArrayOutputStream pdfOutput = new ByteArrayOutputStream();
             document.saveToStream(pdfOutput, FileFormat.PDF);
             return new PdfGeneracionResultado(pdfOutput.toByteArray(), "spire.doc");
-        } catch (Exception e) {
+            
+            } catch (Exception e) {
             throw new IllegalStateException("Error generando PDF con Spire.Doc: " + e.getMessage(), e);
         }
     }
