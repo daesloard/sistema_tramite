@@ -1,4 +1,5 @@
 package com.sistema.tramites.backend.tramite.async;
+import jakarta.annotation.PostConstruct;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -42,6 +43,23 @@ public class CertificadoPostFirmaAsyncService {
         this.emailService = emailService;
         this.auditoriaTramiteService = auditoriaTramiteService;
         this.meterRegistry = meterRegistry;
+    }
+    @PostConstruct
+    public void init() {
+        String[] outcomes = {"success", "tramite_not_found", "invalid_state", "missing_signature", "already_final_state", "pdf_generation_failed", "exception"};
+        String[] modes = {"async", "sync-fallback"};
+        for (String outcome : outcomes) {
+            Counter.builder("tramites.postfirma.total")
+                    .tag("outcome", outcome)
+                    .register(meterRegistry);
+            for (String mode : modes) {
+                Timer.builder("tramites.postfirma.duration")
+                        .tag("outcome", outcome)
+                        .tag("mode", mode)
+                        .register(meterRegistry);
+            }
+        }
+        Counter.builder("tramites.postfirma.email.errors").register(meterRegistry);
     }
 
     @Async("pdfTaskExecutor")
@@ -156,8 +174,24 @@ public class CertificadoPostFirmaAsyncService {
             }
 
             if (tramite.getHashDocumentoGenerado() == null || tramite.getHashDocumentoGenerado().isBlank()) {
-                tramite.setHashDocumentoGenerado(HashUtils.sha256Hex(contenidoPdf));
+                String hashNuevo = HashUtils.sha256Hex(contenidoPdf);
+                tramite.setHashDocumentoGenerado(hashNuevo);
                 actualizado = true;
+                
+                // Regenerar PDF con hash visible
+                try {
+                    documentoGeneradoService.generarYAdjuntarPdf(tramite, verificacionAprobada, observaciones);
+                    auditoriaTramiteService.registrarEventoInmediato(
+                            tramite.getId(),
+                            null,
+                            "HASH_EMBEDDED_IN_PDF",
+                            "Hash SHA256 '" + hashNuevo.substring(0, 16) + "..." + "' embebido en PDF visible",
+                            tramite.getEstado(),
+                            tramite.getEstado()
+                    );
+                } catch (Exception hashEx) {
+                    log.warn("No se pudo re-generar PDF con hash visible para trámite {}: {}", tramiteId, hashEx.getMessage());
+                }
             }
 
             if (actualizado) {

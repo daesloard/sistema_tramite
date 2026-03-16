@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { API_TRAMITES_URL } from '../config/api';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { API_TRAMITES_URL, API_ORIGIN, API_DOCUMENTOS_URL } from '../config/api';
 import { listarTramites } from '../services/api';
 import { filtrarCertificadosGenerados } from '../utils/certificateFilters';
 import { formatearFechaHora, obtenerTextoDiasHabilesRestantes } from '../utils/dateUtils';
@@ -15,18 +15,20 @@ import { getPanelVerificadorStyles } from '../styles/components/PanelVerificador
 const styles = getPanelVerificadorStyles();
 
 const FILTROS_VERIFICADOR = [
-    { id: 'pendientes', titulo: '📥 Pendientes', estados: ['RADICADO', 'EN_VALIDACION'] },
-    { id: 'aprobados', titulo: '✅ Aprobados (Firma)', estados: ['EN_FIRMA'] },
-    { id: 'negados', titulo: '❌ Rechazados', estados: ['RECHAZADO'] },
-    { id: 'finalizados', titulo: '🎓 Finalizados', estados: ['FINALIZADO'] },
+    { key: 'pendientes', label: 'Pendientes', titulo: '⏳ Solicitudes por Verificar', estados: ['RADICADO', 'EN_VALIDACION'] },
+    { key: 'revision', label: 'En Revisión (Admin)', labelBadge: 'Revisión', titulo: '📑 Pendientes de Ajuste Documental', estados: ['EN_REVISION'] },
+    { key: 'aprobadas', label: 'Aprobadas', labelBadge: 'Aprobada', titulo: '✅ Solicitudes Aprobadas por Verificador', estados: ['EN_FIRMA', 'APROBADO', 'FINALIZADO'] },
+    { key: 'rechazadas', label: 'Rechazadas', labelBadge: 'Rechazada', titulo: '❌ Solicitudes Rechazadas', estados: ['RECHAZADO'] },
 ];
 
 const ESTADO_BADGE = {
-    RADICADO: { text: 'Nuevo', style: { background: '#ebf5ff', color: '#1e40af' } },
-    EN_VALIDACION: { text: 'En Revisión', style: { background: '#fef3c7', color: '#92400e' } },
-    EN_FIRMA: { text: 'Para Firma', style: { background: '#f5f3ff', color: '#5b21b6' } },
-    FINALIZADO: { text: 'Terminado', style: { background: '#ecfdf5', color: '#065f46' } },
-    RECHAZADO: { text: 'Rechazado', style: { background: '#fef2f2', color: '#991b1b' } },
+    RADICADO: { text: 'Radicado', style: { backgroundColor: '#f3f4f6', color: '#374151' } },
+    EN_VALIDACION: { text: 'En Validación', style: { backgroundColor: '#dbeafe', color: '#1e40af' } },
+    EN_REVISION: { text: 'En Revisión', style: { backgroundColor: '#fef3c7', color: '#92400e' } },
+    EN_FIRMA: { text: 'En Firma', style: { backgroundColor: '#e0e7ff', color: '#3730a3' } },
+    APROBADO: { text: 'Aprobado', style: { backgroundColor: '#dcfce7', color: '#166534' } },
+    FINALIZADO: { text: 'Finalizado', style: { backgroundColor: '#d1fae5', color: '#065f46' } },
+    RECHAZADO: { text: 'Rechazado', style: { backgroundColor: '#fee2e2', color: '#991b1b' } },
 };
 
 const getEstadoBadge = (estado) => ESTADO_BADGE[estado] || { text: estado, style: { background: '#f3f4f6', color: '#374151' } };
@@ -96,11 +98,19 @@ export default function PanelVerificador({ usuarioActual }) {
         tipo: filtroCertTipo,
     }), [solicitudes, filtroCertRadicado, filtroCertNombre, filtroCertTipo]);
 
-    const handleAprobar = async () => {
+const handleAprobar = async () => {
         if (!selectedSolicitud || procesando) return;
+        if (!consecutivo.trim()) {
+          mostrarAviso('warning', 'Debes ingresar el consecutivo para aprobar');
+          return;
+        }
+        if (!/^\d+$/.test(consecutivo.trim())) {
+          mostrarAviso('warning', 'El consecutivo debe ser solo números');
+          return;
+        }
         setProcesando(true);
         try {
-            const response = await fetch(`${API_TRAMITES_URL}/${selectedSolicitud.id}/verificar`, {
+            const response = await fetch(`${API_TRAMITES_URL}/${selectedSolicitud.id}/verificacion`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Username': usuarioActual.username },
                 body: JSON.stringify({ aprobado: true, observaciones, consecutivo }),
@@ -121,7 +131,7 @@ export default function PanelVerificador({ usuarioActual }) {
         if (!observaciones.trim()) return mostrarAviso('warning', 'Debes ingresar una observación para rechazar');
         setProcesando(true);
         try {
-            const response = await fetch(`${API_TRAMITES_URL}/${selectedSolicitud.id}/verificar`, {
+            const response = await fetch(`${API_TRAMITES_URL}/${selectedSolicitud.id}/verificacion`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Username': usuarioActual.username },
                 body: JSON.stringify({ aprobado: false, observaciones }),
@@ -153,28 +163,43 @@ export default function PanelVerificador({ usuarioActual }) {
         }
     };
 
-    const cargarEstadoDocumentos = async (tramiteId) => {
+    const cargarEstadoDocumentos = useCallback(async (tramiteId) => {
+        if (!tramiteId) return;
         setLoadingDocumentos(true);
         try {
-            const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/verificar-documentos`, {
-                headers: { 'X-Username': usuarioActual.username },
+            const username = usuarioActual?.username || '';
+            const isAdmin = usuarioActual?.rol === 'ADMINISTRADOR';
+            
+            const response = await fetch(`${API_DOCUMENTOS_URL}/verificar/${tramiteId}`, {
+                headers: {
+                    'X-Username': username,
+                    'X-Admin-Username': (isAdmin ? username : '')
+                }
             });
-            if (!response.ok) throw new Error('Error al cargar estado documental');
-            setDocumentStatus(await response.json());
+            
+            if (!response.ok) {
+                const errorData = await response.text();
+                throw new Error(errorData || 'Error al cargar estado documental');
+            }
+            
+            const data = await response.json();
+            setDocumentStatus(data);
         } catch (err) {
+            console.error('Error verificando documentos:', err);
             mostrarAviso('error', err.message);
         } finally {
             setLoadingDocumentos(false);
         }
-    };
+    }, [usuarioActual?.username, usuarioActual?.rol]);
 
     const handleNotificarAdmin = async () => {
         if (!selectedSolicitud || enviandoNotificacionAdmin) return;
         setEnviandoNotificacionAdmin(true);
         try {
-            const response = await fetch(`${API_TRAMITES_URL}/${selectedSolicitud.id}/notificar-admin`, {
+            const response = await fetch(`${API_DOCUMENTOS_URL}/notificar-admin/${selectedSolicitud.id}`, {
                 method: 'POST',
-                headers: { 'X-Username': usuarioActual.username },
+                headers: { 'Content-Type': 'application/json', 'X-Username': usuarioActual.username },
+                body: JSON.stringify({}),
             });
             if (!response.ok) throw new Error(await response.text() || 'Error al notificar');
             mostrarAviso('success', 'Administrador notificado para revisión documental');
@@ -195,7 +220,7 @@ export default function PanelVerificador({ usuarioActual }) {
 
     const abrirDocumento = async (tramiteId, tipo) => {
         try {
-            const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/descargar/${tipo}?accion=ver`, {
+            const response = await fetch(`${API_DOCUMENTOS_URL}/descargar/${tramiteId}?tipo=${tipo}&accion=ver`, {
                 headers: { 'X-Username': usuarioActual.username },
             });
             if (!response.ok) throw new Error('Documento no disponible');
@@ -207,7 +232,7 @@ export default function PanelVerificador({ usuarioActual }) {
 
     const descargarDocumento = async (tramiteId, tipo) => {
         try {
-            const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/descargar/${tipo}?accion=descargar`, {
+            const response = await fetch(`${API_DOCUMENTOS_URL}/descargar/${tramiteId}?tipo=${tipo}&accion=descargar`, {
                 headers: { 'X-Username': usuarioActual.username },
             });
             if (!response.ok) throw new Error('Error al descargar');
@@ -286,7 +311,7 @@ export default function PanelVerificador({ usuarioActual }) {
                 styles={styles}
             />
 
-            <div style={{ ...styles.cuerpo, ...(isMobile ? {} : styles.cuerpoDesktop) }}>
+            <div style={{ ...styles.layout, ...(isMobile ? styles.layoutMobile : styles.layoutDesktop) }}>
                 {(!isMobile || !selectedSolicitud) && (
                     <VerificadorTramiteList
                         filtroActual={filtroActual}

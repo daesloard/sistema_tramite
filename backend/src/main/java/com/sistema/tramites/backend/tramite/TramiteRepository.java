@@ -9,7 +9,7 @@ import java.util.Optional;
 
 public interface TramiteRepository extends JpaRepository<Tramite, Long> {
 	Optional<Tramite> findByNumeroRadicadoIgnoreCase(String numeroRadicado);
-	Optional<Tramite> findByCodigoVerificacionIgnoreCase(String codigoVerificacion);
+	Optional<Tramite> findByHashDocumentoGeneradoIgnoreCase(String hash);
 	List<Tramite> findAllByFechaRadicacionBetweenAndConsecutivoVerificadorIsNotNull(LocalDateTime inicio, LocalDateTime fin);
 	List<Tramite> findTop100ByEstadoAndFirmaAlcaldeIsNotNullAndFechaFirmaAlcaldeBeforeOrderByFechaFirmaAlcaldeAsc(
 		EstadoTramite estado,

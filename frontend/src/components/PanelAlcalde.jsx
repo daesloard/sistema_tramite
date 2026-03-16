@@ -40,7 +40,7 @@ export default function PanelAlcalde() {
   const [vistaPreviaPdf, setVistaPreviaPdf] = useState('');
   const [loadingVistaPrevia, setLoadingVistaPrevia] = useState(false);
   const [procesando, setProcesando] = useState(false);
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 992 : false);
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
   const [filtroCertRadicado, setFiltroCertRadicado] = useState('');
   const [filtroCertNombre, setFiltroCertNombre] = useState('');
   const [filtroCertTipo, setFiltroCertTipo] = useState('todos');
@@ -56,7 +56,7 @@ export default function PanelAlcalde() {
   }, []);
 
   useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 992);
+    const onResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);

@@ -222,7 +222,7 @@ export default function App() {
           contenido: (
             <PanelErrorBoundary onRetry={() => navigate(0)} onGoHome={() => navigate('/')}>
               <Suspense fallback={<CargandoModulo texto="Cargando panel de verificador..." />}>
-                <PanelVerificador />
+                <PanelVerificador usuarioActual={usuarioActual} />
               </Suspense>
             </PanelErrorBoundary>
           ),
@@ -237,7 +237,7 @@ export default function App() {
           contenido: (
             <PanelErrorBoundary onRetry={() => navigate(0)} onGoHome={() => navigate('/')}>
               <Suspense fallback={<CargandoModulo texto="Cargando panel de alcalde..." />}>
-                <PanelAlcalde />
+                <PanelAlcalde usuarioActual={usuarioActual} />
               </Suspense>
             </PanelErrorBoundary>
           ),

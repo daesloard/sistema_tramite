@@ -10,3 +10,4 @@ export const API_ORIGIN = (import.meta.env.VITE_API_ORIGIN || origenPorDefecto)
 export const API_TRAMITES_URL = `${API_ORIGIN}/api/tramites`;
 export const API_AUTH_URL = `${API_ORIGIN}/api/auth`;
 export const API_NOTIFICACIONES_URL = `${API_ORIGIN}/api/notificaciones`;
+export const API_DOCUMENTOS_URL = `${API_ORIGIN}/api/documentacion`;

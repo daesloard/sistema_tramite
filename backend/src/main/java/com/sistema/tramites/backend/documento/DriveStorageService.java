@@ -23,6 +23,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.sistema.tramites.backend.tramite.Tramite;
+
 @Service
 public class DriveStorageService {
 
@@ -45,7 +47,7 @@ public class DriveStorageService {
         return driveEnabled && credentialsJsonBase64 != null && !credentialsJsonBase64.isBlank();
     }
 
-    public String obtenerOCrearCarpetaDrive(com.sistema.tramites.backend.tramite.Tramite tramite) throws IOException {
+    public String obtenerOCrearCarpetaDrive(Tramite tramite) throws IOException {
         if (tramite.getDriveFolderId() != null && !tramite.getDriveFolderId().isBlank()) {
             return tramite.getDriveFolderId();
         }

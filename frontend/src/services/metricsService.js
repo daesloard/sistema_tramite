@@ -21,31 +21,17 @@ export async function obtenerMetricasOperativasAdmin() {
     const [
         httpP95,
         postFirmaTotal,
-        postFirmaSuccess,
-        postFirmaException,
         postFirmaEmailErrors,
-        pdfTotal,
-        pdfSuccess,
+        postFirmaDuration,
         pdfErrors,
-        pdfAvg,
-        pdfMax,
-        pdfEngineGotenberg,
-        pdfEngineLibreoffice,
-        pdfEngineDocx4j
+        pdfGenerationDuration
     ] = await Promise.all([
         fetchSafe(`${ACTUATOR_URL}/metrics/http.server.requests?tag=uri:/api/tramites&tag=method:GET&statistic=VALUE_AT_PERCENTILE&percentile=0.95`),
         fetchSafe(`${ACTUATOR_URL}/metrics/tramites.postfirma.total`),
-        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.postfirma.success`),
-        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.postfirma.exception`),
         fetchSafe(`${ACTUATOR_URL}/metrics/tramites.postfirma.email.errors`),
-        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.pdf.total`),
-        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.pdf.success`),
-        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.pdf.errors`),
-        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.pdf.duration?statistic=AVG`),
-        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.pdf.duration?statistic=MAX`),
-        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.pdf.total?tag=engine:gotenberg`),
-        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.pdf.total?tag=engine:libreoffice`),
-        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.pdf.total?tag=engine:docx4j`),
+        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.postfirma.duration`),
+        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.pdf.generation.errors`),
+        fetchSafe(`${ACTUATOR_URL}/metrics/tramites.pdf.generation.duration`),
     ]);
 
     const getVal = (m) => (m?.measurements?.[0]?.value ?? 0);
@@ -58,21 +44,12 @@ export async function obtenerMetricasOperativasAdmin() {
         },
         postFirma: {
             total: getVal(postFirmaTotal),
-            success: getVal(postFirmaSuccess),
-            exception: getVal(postFirmaException),
             emailErrors: getVal(postFirmaEmailErrors),
-            successAvgSeconds: 0, // No hay métrica directa de promedio por ahora
-            successMaxSeconds: 0,
+            duration: getVal(postFirmaDuration),
         },
         pdf: {
-            total: getVal(pdfTotal),
-            success: getVal(pdfSuccess),
             errors: getVal(pdfErrors),
-            avgSeconds: getVal(pdfAvg),
-            maxSeconds: getVal(pdfMax),
-            engineGotenberg: getVal(pdfEngineGotenberg),
-            engineLibreoffice: getVal(pdfEngineLibreoffice),
-            engineDocx4j: getVal(pdfEngineDocx4j),
+            generationDuration: getVal(pdfGenerationDuration),
         }
     };
 }

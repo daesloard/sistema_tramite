@@ -39,19 +39,19 @@ public class CertificadoQueryService {
         this.auditoriaTramiteService = auditoriaTramiteService;
     }
 
-    @Transactional(readOnly = true)
+@Transactional(readOnly = true)
     public Map<String, Object> verificarCertificado(String numeroRadicado, String factorTipo, String factorValor) {
         String criterio = numeroRadicado == null ? "" : numeroRadicado.trim();
-        if (criterio.isBlank()) throw new IllegalArgumentException("Radicado o código de verificación requerido");
+        if (criterio.isBlank()) throw new IllegalArgumentException("Radicado o hash requerido");
 
         String tipo = factorTipo == null ? "" : factorTipo.trim().toUpperCase(Locale.ROOT);
         String valor = factorValor == null ? "" : factorValor.trim();
         if (tipo.isBlank() || valor.isBlank()) throw new IllegalArgumentException("Debes enviar el factor de validación (tipo y valor)");
 
         Optional<Tramite> optTramite = tramiteRepository.findByNumeroRadicadoIgnoreCase(criterio);
-        if (optTramite.isEmpty()) optTramite = tramiteRepository.findByCodigoVerificacionIgnoreCase(criterio);
+        if (optTramite.isEmpty()) optTramite = tramiteRepository.findByHashDocumentoGeneradoIgnoreCase(criterio);
 
-        Tramite t = optTramite.orElseThrow(() -> new IllegalArgumentException("Radicado o código de verificación no encontrado"));
+        Tramite t = optTramite.orElseThrow(() -> new IllegalArgumentException("Radicado o hash no encontrado"));
 
         if (!validarFactorReconocimiento(t, tipo, valor)) {
             throw new SecurityException("El dato de validación no coincide con el titular de la solicitud");
@@ -201,10 +201,10 @@ public class CertificadoQueryService {
     public Map<String, Object> vistaPreviaDocumento(Long id, boolean includePdf, String usernameHeader, String adminUsernameHeader) {
         Tramite tramite = tramiteRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Trámite no encontrado"));
         boolean aprobado = esDecisionAprobada(tramite);
-        String contenido = "";
-        String html = "";
-        try { contenido = documentoGeneradoService.generarTextoDocumento(tramite, aprobado, tramite.getObservaciones()); } catch (Exception ignored) {}
-        try { html = documentoGeneradoService.generarHtmlDocumento(tramite, aprobado, tramite.getObservaciones()); } catch (Exception ignored) {}
+        String contenido = documentoGeneradoService.generarTextoDocumento(tramite, aprobado, tramite.getObservaciones() != null ? tramite.getObservaciones() : "");
+        String html = documentoGeneradoService.generarHtmlPreview(tramite, aprobado, tramite.getObservaciones() != null ? tramite.getObservaciones() : "");
+
+
 
         byte[] pdfVistaPrevia = null;
         String errorPdf = null;
@@ -217,7 +217,20 @@ public class CertificadoQueryService {
         respuesta.put("tramiteId", tramite.getId());
         respuesta.put("numeroRadicado", tramite.getNumeroRadicado());
         respuesta.put("estado", tramite.getEstado() != null ? tramite.getEstado().name() : null);
-        respuesta.put("plantilla", documentoGeneradoService.obtenerNombrePlantillaDocumento(tramite, aprobado));
+        String templateName;
+        if (!aprobado) {
+            templateName = "RESPUESTA NEGATIVA.docx";
+        } else {
+            String tipo = (tramite.getTipo_certificado() != null ? tramite.getTipo_certificado().trim() : "");
+            switch (tipo.toUpperCase()) {
+                case "JUNTA DE ACCION": case "JAC": templateName = "CARTA RESIDENCIA JUNTA DE ACCION.docx"; break;
+                case "REGISTRADURIA NACIONAL": case "REGISTRADURIA": case "ELECTORAL": templateName = "CARTA RESIDENCIA REGISTRADURIA NACIONAL.docx"; break;
+                case "SISBEN": templateName = "CARTA RESIDENCIA SISBEN.docx"; break;
+                default: templateName = "CARTA RESIDENCIA JUNTA DE ACCION.docx";
+            }
+        }
+        respuesta.put("plantilla", templateName);
+
         respuesta.put("contenido", contenido);
         respuesta.put("html", html);
         respuesta.put("pdfBase64", pdfVistaPrevia != null && pdfVistaPrevia.length > 0 ? Base64.getEncoder().encodeToString(pdfVistaPrevia) : null);

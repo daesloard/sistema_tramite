@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { API_AUTH_URL, API_TRAMITES_URL } from '../config/api';
+import { API_AUTH_URL, API_TRAMITES_URL, API_DOCUMENTOS_URL } from '../config/api';
 import { listarTramites, obtenerMetricasOperativasAdmin } from '../services/api';
 import { filtrarCertificadosGenerados } from '../utils/certificateFilters';
 import { formatearFechaHora } from '../utils/dateUtils';
@@ -228,10 +228,13 @@ export default function PanelAdmin({ usuarioActual }) {
   const cargarEstadoDocumentosAdmin = async (tramiteId) => {
     setLoadingDocumentStatusAdminId(tramiteId);
     try {
-      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/verificar-documentos`, {
+      const response = await fetch(`${API_DOCUMENTOS_URL}/verificar/${tramiteId}`, {
         headers: { 'X-Username': usuarioActual.username },
       });
-      if (!response.ok) throw new Error('Error al cargar estado documental');
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(errorData || 'Error al cargar estado documental');
+      }
       const data = await response.json();
       setDocumentStatusAdmin((prev) => ({ ...prev, [tramiteId]: data }));
     } catch (err) {
@@ -259,7 +262,7 @@ export default function PanelAdmin({ usuarioActual }) {
 
   const abrirDocumentoAdmin = async (tramiteId, tipo) => {
     try {
-      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/descargar/${tipo}?accion=ver`, {
+      const response = await fetch(`${API_DOCUMENTOS_URL}/descargar/${tramiteId}?tipo=${tipo}&accion=ver`, {
         headers: { 'X-Username': usuarioActual.username },
       });
       if (!response.ok) throw new Error('Documento no disponible');
@@ -273,7 +276,7 @@ export default function PanelAdmin({ usuarioActual }) {
 
   const descargarDocumentoAdmin = async (tramiteId, tipo) => {
     try {
-      const response = await fetch(`${API_TRAMITES_URL}/${tramiteId}/descargar/${tipo}?accion=descargar`, {
+      const response = await fetch(`${API_DOCUMENTOS_URL}/descargar/${tramiteId}?tipo=${tipo}&accion=descargar`, {
         headers: { 'X-Username': usuarioActual.username },
       });
       if (!response.ok) throw new Error('Error al descargar');
@@ -312,7 +315,11 @@ export default function PanelAdmin({ usuarioActual }) {
     try {
       const formData = new FormData();
       formData.append('file', archivo);
-      const response = await fetch(`${API_TRAMITES_URL}/${tramite.id}/upload-${tipoDocumento}`, { method: 'POST', body: formData });
+      const response = await fetch(`${API_DOCUMENTOS_URL}/subir/${tramite.id}/${tipoDocumento}`, { 
+        method: 'POST', 
+        body: formData,
+        headers: { 'X-Username': usuarioActual.username }
+      });
       if (!response.ok) throw new Error(await response.text() || 'Error al cargar');
       await Promise.all([cargarEstadoDocumentosAdmin(tramite.id), cargarAuditoriaAdmin(tramite.id)]);
       setArchivoCargaAdmin((prev) => { const c = { ...prev }; delete c[key]; return c; });

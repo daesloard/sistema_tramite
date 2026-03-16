@@ -75,8 +75,13 @@ public class FileUploadServiceImpl implements FileUploadService {
             byte[] contenido = file.getBytes();
             String driveId = null;
             if (driveStorageService.isEnabled()) {
-                String driveFolderId = driveStorageService.obtenerOCrearCarpetaDrive(tramite);
-                driveId = driveStorageService.uploadFileToFolder(file.getOriginalFilename(), contentType, contenido, driveFolderId);
+                try {
+                    String driveFolderId = driveStorageService.obtenerOCrearCarpetaDrive(tramite);
+                    driveId = driveStorageService.uploadFileToFolder(file.getOriginalFilename(), contentType, contenido, driveFolderId);
+                } catch (Exception e) {
+                    // Loguear pero no fallar, se guardará en BD por defecto al ser driveId == null
+                    System.err.println("Falla en Google Drive (se usará BD): " + e.getMessage());
+                }
             }
 
             switch (tipo.toLowerCase(Locale.ROOT)) {
@@ -233,52 +238,57 @@ public class FileUploadServiceImpl implements FileUploadService {
             VerificacionDocumentosDTO verificacion = new VerificacionDocumentosDTO();
             
             String rutaIdentidad = tramite.getRuta_documento_identidad();
+            byte[] cIdentidad = tramite.getContenidoDocumentoIdentidad();
             verificacion.identidad = new DocumentoStatusDTO(
-                    tieneContenidoOStorage(tramite.getContenidoDocumentoIdentidad(), rutaIdentidad),
+                    tieneContenidoOStorage(cIdentidad, rutaIdentidad),
                     tramite.getNombreArchivoIdentidad(),
                     tramite.getTipoContenidoIdentidad(),
-                    tramite.getContenidoDocumentoIdentidad() != null ? tramite.getContenidoDocumentoIdentidad().length : 0,
-                    resolverAlmacenamiento(tramite.getContenidoDocumentoIdentidad(), rutaIdentidad),
+                    cIdentidad != null ? cIdentidad.length : 0,
+                    resolverAlmacenamiento(cIdentidad, rutaIdentidad),
                     extraerDriveFileId(rutaIdentidad)
             );
 
             String rutaSolicitud = tramite.getRuta_documento_solicitud();
+            byte[] cSolicitud = tramite.getContenidoDocumentoSolicitud();
             verificacion.solicitud = new DocumentoStatusDTO(
-                    tieneContenidoOStorage(tramite.getContenidoDocumentoSolicitud(), rutaSolicitud),
+                    tieneContenidoOStorage(cSolicitud, rutaSolicitud),
                     tramite.getNombreArchivoSolicitud(),
                     tramite.getTipoContenidoSolicitud(),
-                    tramite.getContenidoDocumentoSolicitud() != null ? tramite.getContenidoDocumentoSolicitud().length : 0,
-                    resolverAlmacenamiento(tramite.getContenidoDocumentoSolicitud(), rutaSolicitud),
+                    cSolicitud != null ? cSolicitud.length : 0,
+                    resolverAlmacenamiento(cSolicitud, rutaSolicitud),
                     extraerDriveFileId(rutaSolicitud)
             );
 
             String rutaSisben = tramite.getRuta_certificado_sisben();
+            byte[] cSisben = tramite.getContenidoCertificadoSisben();
             verificacion.sisben = new DocumentoStatusDTO(
-                    tieneContenidoOStorage(tramite.getContenidoCertificadoSisben(), rutaSisben),
+                    tieneContenidoOStorage(cSisben, rutaSisben),
                     tramite.getNombreArchivoSisben(),
                     tramite.getTipoContenidoSisben(),
-                    tramite.getContenidoCertificadoSisben() != null ? tramite.getContenidoCertificadoSisben().length : 0,
-                    resolverAlmacenamiento(tramite.getContenidoCertificadoSisben(), rutaSisben),
+                    cSisben != null ? cSisben.length : 0,
+                    resolverAlmacenamiento(cSisben, rutaSisben),
                     extraerDriveFileId(rutaSisben)
             );
 
             String rutaElectoral = tramite.getRuta_certificado_electoral();
+            byte[] cElectoral = tramite.getContenidoCertificadoElectoral();
             verificacion.electoral = new DocumentoStatusDTO(
-                    tieneContenidoOStorage(tramite.getContenidoCertificadoElectoral(), rutaElectoral),
+                    tieneContenidoOStorage(cElectoral, rutaElectoral),
                     tramite.getNombreArchivoElectoral(),
                     tramite.getTipoContenidoElectoral(),
-                    tramite.getContenidoCertificadoElectoral() != null ? tramite.getContenidoCertificadoElectoral().length : 0,
-                    resolverAlmacenamiento(tramite.getContenidoCertificadoElectoral(), rutaElectoral),
+                    cElectoral != null ? cElectoral.length : 0,
+                    resolverAlmacenamiento(cElectoral, rutaElectoral),
                     extraerDriveFileId(rutaElectoral)
             );
 
             String rutaResidencia = tramite.getRuta_certificado();
+            byte[] cResidencia = tramite.getContenidoDocumentoResidencia();
             verificacion.residencia = new DocumentoStatusDTO(
-                    tieneContenidoOStorage(tramite.getContenidoDocumentoResidencia(), rutaResidencia),
+                    tieneContenidoOStorage(cResidencia, rutaResidencia),
                     tramite.getNombreArchivoResidencia(),
                     tramite.getTipoContenidoResidencia(),
-                    tramite.getContenidoDocumentoResidencia() != null ? tramite.getContenidoDocumentoResidencia().length : 0,
-                    resolverAlmacenamiento(tramite.getContenidoDocumentoResidencia(), rutaResidencia),
+                    cResidencia != null ? cResidencia.length : 0,
+                    resolverAlmacenamiento(cResidencia, rutaResidencia),
                     extraerDriveFileId(rutaResidencia)
             );
             verificacion.jac = verificacion.residencia;
@@ -363,7 +373,9 @@ public class FileUploadServiceImpl implements FileUploadService {
         String name = fileName.toLowerCase();
         return (contentType.equals("application/pdf") && name.endsWith(".pdf")) ||
                (contentType.equals("image/jpeg") && (name.endsWith(".jpg") || name.endsWith(".jpeg"))) ||
-               (contentType.equals("image/png") && name.endsWith(".png"));
+               (contentType.equals("image/png") && name.endsWith(".png")) ||
+               (contentType.equals("application/msword") && name.endsWith(".doc")) ||
+               (contentType.equals("application/vnd.openxmlformats-officedocument.wordprocessingml.document") && name.endsWith(".docx"));
     }
 
     private String extraerDriveFileId(String ruta) {

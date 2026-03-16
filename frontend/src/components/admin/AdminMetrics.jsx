@@ -3,7 +3,7 @@ import { formatearFechaHora } from '../../utils/dateUtils';
 
 const UMBRALES_OPERACION = {
     httpP95WarningSeconds: 1.2,
-    httpP95CriticalSeconds: 2.5,
+    httpP95CriticalSeconds: 5.0,
     postFirmaExceptionRatioWarning: 0.03,
     postFirmaExceptionRatioCritical: 0.1,
     emailErrorsWarning: 1,
@@ -190,29 +190,30 @@ export default function AdminMetrics({
                                 <div style={styles.metricaCard}>
                                     <p style={styles.metricaTitulo}>Post-firma total</p>
                                     <p style={styles.metricaValor}>{formatoNumeroMetrica(metricasOperativas?.postFirma?.total)}</p>
-                                    <p style={styles.metricaDetalle}>
-                                        OK: {formatoNumeroMetrica(metricasOperativas?.postFirma?.success)} | Exception: {formatoNumeroMetrica(metricasOperativas?.postFirma?.exception)}
-                                    </p>
                                 </div>
 
                                 <div style={styles.metricaCard}>
                                     <p style={styles.metricaTitulo}>Errores de correo</p>
                                     <p style={styles.metricaValor}>{formatoNumeroMetrica(metricasOperativas?.postFirma?.emailErrors)}</p>
-                                    <p style={styles.metricaDetalle}>Metrica: tramites.postfirma.email.errors</p>
+                                    <p style={styles.metricaDetalle}>Métrica: tramites.postfirma.email.errors</p>
                                 </div>
 
                                 <div style={styles.metricaCard}>
-                                    <p style={styles.metricaTitulo}>Duracion post-firma (OK)</p>
-                                    <p style={styles.metricaValor}>{formatoDuracion(metricasOperativas?.postFirma?.successAvgSeconds)}</p>
-                                    <p style={styles.metricaDetalle}>Maximo: {formatoDuracion(metricasOperativas?.postFirma?.successMaxSeconds)}</p>
+                                    <p style={styles.metricaTitulo}>Duración post-firma</p>
+                                    <p style={styles.metricaValor}>{formatoDuracion(metricasOperativas?.postFirma?.duration)}</p>
+                                    <p style={styles.metricaDetalle}>Métrica: tramites.postfirma.duration</p>
                                 </div>
 
                                 <div style={styles.metricaCard}>
-                                    <p style={styles.metricaTitulo}>Generacion PDF total</p>
-                                    <p style={styles.metricaValor}>{formatoNumeroMetrica(metricasOperativas?.pdf?.total)}</p>
-                                    <p style={styles.metricaDetalle}>
-                                        OK: {formatoNumeroMetrica(metricasOperativas?.pdf?.success)} | Error: {formatoNumeroMetrica(metricasOperativas?.pdf?.errors)}
-                                    </p>
+                                    <p style={styles.metricaTitulo}>Errores generación PDF</p>
+                                    <p style={styles.metricaValor}>{formatoNumeroMetrica(metricasOperativas?.pdf?.errors)}</p>
+                                    <p style={styles.metricaDetalle}>Métrica: tramites.pdf.generation.errors</p>
+                                </div>
+
+                                <div style={styles.metricaCard}>
+                                    <p style={styles.metricaTitulo}>Duración generación PDF</p>
+                                    <p style={styles.metricaValor}>{formatoDuracion(metricasOperativas?.pdf?.generationDuration)}</p>
+                                    <p style={styles.metricaDetalle}>Métrica: tramites.pdf.generation.duration</p>
                                 </div>
                             </div>
                         </>

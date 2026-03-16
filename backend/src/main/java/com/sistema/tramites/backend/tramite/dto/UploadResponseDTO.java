@@ -8,6 +8,8 @@ public class UploadResponseDTO {
     public String driveFolderId;
     public String driveFileId;
 
+    public UploadResponseDTO() {}
+
     public UploadResponseDTO(boolean success, String message, Long tramiteId,
                              String almacenamiento, String driveFolderId, String driveFileId) {
         this.success = success;

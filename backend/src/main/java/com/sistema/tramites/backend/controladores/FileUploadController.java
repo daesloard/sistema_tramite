@@ -9,24 +9,26 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
-@RequestMapping("/api/tramites/upload")
-@Tag(name = "File Upload", description = "Endpoints para carga y descarga de documentos de trámites")
-@CrossOrigin(origins = "*")
+@RequestMapping("/api/documentacion")
+@Tag(name = "Gestión Documental", description = "Endpoints para carga, descarga y verificación de documentos")
+
 public class FileUploadController {
 
     @Autowired
     private FileUploadService fileUploadService;
 
-    @PostMapping("/{id}")
-    @Operation(summary = "Cargar un documento para un trámite específico")
+    @PostMapping("/subir/{id}/{tipo}")
+    @Operation(summary = "Cargar un documento por tipo")
     public ResponseEntity<?> uploadDocumento(
             @PathVariable Long id,
             @RequestParam("file") MultipartFile file,
-            @RequestParam("tipo") String tipo) {
+            @PathVariable String tipo,
+            @RequestHeader(value = "X-Username", required = false) String usernameHeader) {
+        // El servicio ya maneja la lógica independientemente del path
         return fileUploadService.uploadDocumento(id, file, tipo);
     }
 
-    @GetMapping("/download/{id}")
+    @GetMapping("/descargar/{id}")
     @Operation(summary = "Descargar un documento cargado")
     public ResponseEntity<?> descargarDocumento(
             @PathVariable Long id,
@@ -80,19 +82,21 @@ public class FileUploadController {
 
     public static class VerificacionDocumentosDTO {
         public Long tramiteId;
-        public DocumentoStatusDTO identidad;
-        public DocumentoStatusDTO solicitud;
-        public DocumentoStatusDTO sisben;
-        public DocumentoStatusDTO electoral;
-        public DocumentoStatusDTO residencia;
-        public DocumentoStatusDTO jac;
-        public boolean driveHabilitado;
+        public DocumentoStatusDTO identidad = new DocumentoStatusDTO();
+        public DocumentoStatusDTO solicitud = new DocumentoStatusDTO();
+        public DocumentoStatusDTO sisben = new DocumentoStatusDTO();
+        public DocumentoStatusDTO electoral = new DocumentoStatusDTO();
+        public DocumentoStatusDTO residencia = new DocumentoStatusDTO();
+        public DocumentoStatusDTO jac = new DocumentoStatusDTO();
+        public boolean driveHabilitado = false;
         public String driveFolderId;
-        public boolean certificadoGeneradoDisponible;
-        public String certificadoGeneradoAlmacenamiento;
+        public boolean certificadoGeneradoDisponible = false;
+        public String certificadoGeneradoAlmacenamiento = "NINGUNO";
         public String certificadoGeneradoDriveFileId;
         public String certificadoGeneradoNombre;
         public String rutaCertificadoFinal;
-        public int totalDocumentosCargados;
+        public int totalDocumentosCargados = 0;
+
+        public VerificacionDocumentosDTO() {}
     }
 }
