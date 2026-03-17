@@ -173,10 +173,13 @@ public class DocumentoGeneradoService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
             HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(formData, headers);
-            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-            factory.setConnectTimeout(gotenbergTimeoutSeconds * 1000);
-            factory.setReadTimeout(gotenbergTimeoutSeconds * 1000);
-            RestTemplate gotenbergClient = new RestTemplate(factory);
+            this.restTemplate.getRequestFactory().ifPresent(rf -> {
+                if (rf instanceof SimpleClientHttpRequestFactory scf) {
+                    scf.setConnectTimeout(gotenbergTimeoutSeconds * 1000);
+                    scf.setReadTimeout(gotenbergTimeoutSeconds * 1000);
+                }
+            });
+            RestTemplate gotenbergClient = this.restTemplate;
             ResponseEntity<byte[]> response = gotenbergClient.postForEntity(gotenbergUrl, requestEntity, byte[].class);
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 logger.info("PDF generado con Gotenberg desde template: {}", templateName);
