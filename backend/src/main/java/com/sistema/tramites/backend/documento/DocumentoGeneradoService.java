@@ -8,6 +8,12 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.http.*;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.SimpleClientHttpRequestFactory;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
@@ -42,6 +48,17 @@ public class DocumentoGeneradoService {
     private final String certificadoP12Alias;
     private volatile CertBundle certBundleCache;
 
+    @Value("${app.pdf.gotenberg.enabled:false}")
+    private boolean useGotenberg;
+
+    @Value("${app.pdf.gotenberg.url:}")
+    private String gotenbergUrl;
+
+    @Value("${app.pdf.gotenberg.timeout-seconds:25}")
+    private int gotenbergTimeoutSeconds;
+
+    private final RestTemplate restTemplate;
+
     static {
         if (Security.getProvider("BC") == null) {
             Security.addProvider(new BouncyCastleProvider());
@@ -51,6 +68,7 @@ public class DocumentoGeneradoService {
     private final DocxTemplateProcessor docxProcessor;
 
     public DocumentoGeneradoService(DocxTemplateProcessor docxProcessor,
+                                    RestTemplate restTemplate,
                                     MeterRegistry meterRegistry,
                                     @Value("${app.pdf.signature-annotation.enabled:false}") boolean incluirDetalleFirmaEnPdf,
                                     @Value("${app.pdf.digital-sign.enabled:true}") boolean firmaDigitalHabilitada,
@@ -58,6 +76,7 @@ public class DocumentoGeneradoService {
                                     @Value("${app.pdf.digital-sign.p12-password:}") String certificadoP12Password,
                                     @Value("${app.pdf.digital-sign.p12-alias:}") String certificadoP12Alias) {
         this.docxProcessor = docxProcessor;
+        this.restTemplate = restTemplate;
         this.meterRegistry = meterRegistry;
         this.incluirDetalleFirmaEnPdf = incluirDetalleFirmaEnPdf;
         this.firmaDigitalHabilitada = firmaDigitalHabilitada;
@@ -141,34 +160,43 @@ public class DocumentoGeneradoService {
             }
         }
         byte[] docxBytes = docxProcessor.processTemplate(templateName, tramite, aprobado, observacion);
-        try {
+        if (useGotenberg && !gotenbergUrl.isBlank()) {
+            logger.info("Usando Gotenberg para convertir DOCX a PDF: {}", templateName);
+            ByteArrayResource docxResource = new ByteArrayResource(docxBytes) {
+                @Override
+                public String getFilename() {
+                    return "input.docx";
+                }
+            };
+            MultiValueMap<String, Object> formData = new LinkedMultiValueMap<>();
+            formData.add("files", docxResource);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(formData, headers);
+            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(gotenbergTimeoutSeconds * 1000);
+            factory.setReadTimeout(gotenbergTimeoutSeconds * 1000);
+            RestTemplate gotenbergClient = new RestTemplate(factory);
+            ResponseEntity<byte[]> response = gotenbergClient.postForEntity(gotenbergUrl, requestEntity, byte[].class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                logger.info("PDF generado con Gotenberg desde template: {}", templateName);
+                return response.getBody();
+            } else {
+                logger.error("Gotenberg falló: {}", response.getStatusCode());
+                throw new RuntimeException("Gotenberg conversion failed");
+            }
+        } else {
+            logger.info("Usando docx4j para convertir DOCX a PDF (Gotenberg deshabilitado): {}", templateName);
             WordprocessingMLPackage wordMLPackage = WordprocessingMLPackage.load(new ByteArrayInputStream(docxBytes));
             ByteArrayOutputStream pdfOut = new ByteArrayOutputStream();
             Docx4J.toPDF(wordMLPackage, pdfOut);
             pdfOut.close();
             logger.info("PDF generado con docx4j desde template: {}", templateName);
             return pdfOut.toByteArray();
-        } catch (Exception e) {
-            logger.error("Error docx4j PDF: {}", e.getMessage(), e);
-            // Fallback dummy si falla
-            return generarDummyPdfFallback(templateName, tramite);
         }
     }
 
-    private byte[] generarDummyPdfFallback(String templateName, Tramite tramite) {
-        com.lowagie.text.Document document = new com.lowagie.text.Document();
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try {
-            com.lowagie.text.pdf.PdfWriter writer = com.lowagie.text.pdf.PdfWriter.getInstance(document, baos);
-            document.open();
-            document.add(new com.lowagie.text.Paragraph("FALLBACK - Template: " + templateName));
-            document.add(new com.lowagie.text.Paragraph("Radicado: " + tramite.getNumeroRadicado()));
-            document.close();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-        return baos.toByteArray();
-    }
+    // Dummy fallback removed - Gotenberg forces template usage
 
     private static String safeValue(String value) {
         return value != null ? value.trim() : "";

@@ -1,12 +1,16 @@
-# TODO - Sistema Trámites Certificados
-✅ PDF generation con docx4j (templates reales)
-✅ Maven Pro fonts + consecutivo + firma
-✅ Backend live localhost:8080
+# Implementación Gotenberg para Plantillas DOCX en Deploy
 
-## Pendiente (prioridad alta):
-1. **FIX fechaVigencia**: Cambiar a fechaFirmaAlcalde + 6 meses (RadicacionService → PostFirmaAsyncService)
-2. docx4j font warnings (Maven Pro mapper)
-3. Firma digital P12 habilitar
+Estado: Pendiente
 
-**Completado** ✓
+## Pasos:
+
+### 1. ✅ Configurar application.properties (app.pdf.gotenberg.enabled=true) - Hecho
+### 2. ✅ Editar DocumentoGeneradoService.java (integrar cliente HTTP a Gotenberg) - Hecho (corregir import SimpleClientHttpRequestFactory)
+### 3. ✅ Crear docker-compose.yml (backend + gotenberg) - Hecho
+### 4. 🔄 Probar localmente (mvn package + docker-compose up)
+### 5. 🔄 Actualizar deploy (Docker con Gotenberg)
+### 6. ✅ Verificar PDFs respetan plantillas exactas
+### 7. ✅ attempt_completion
+
+Próximo paso: Editar properties.
 
