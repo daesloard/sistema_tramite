@@ -12,7 +12,7 @@ import org.springframework.http.*;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.client.SimpleClientHttpRequestFactory;
+
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
@@ -173,12 +173,6 @@ public class DocumentoGeneradoService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
             HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(formData, headers);
-            this.restTemplate.getRequestFactory().ifPresent(rf -> {
-                if (rf instanceof SimpleClientHttpRequestFactory scf) {
-                    scf.setConnectTimeout(gotenbergTimeoutSeconds * 1000);
-                    scf.setReadTimeout(gotenbergTimeoutSeconds * 1000);
-                }
-            });
             RestTemplate gotenbergClient = this.restTemplate;
             ResponseEntity<byte[]> response = gotenbergClient.postForEntity(gotenbergUrl, requestEntity, byte[].class);
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
@@ -190,12 +184,35 @@ public class DocumentoGeneradoService {
             }
         } else {
             logger.info("Usando docx4j para convertir DOCX a PDF (Gotenberg deshabilitado): {}", templateName);
-            WordprocessingMLPackage wordMLPackage = WordprocessingMLPackage.load(new ByteArrayInputStream(docxBytes));
-            ByteArrayOutputStream pdfOut = new ByteArrayOutputStream();
-            Docx4J.toPDF(wordMLPackage, pdfOut);
-            pdfOut.close();
-            logger.info("PDF generado con docx4j desde template: {}", templateName);
-            return pdfOut.toByteArray();
+            try {
+                WordprocessingMLPackage wordMLPackage = WordprocessingMLPackage.load(new ByteArrayInputStream(docxBytes));
+                ByteArrayOutputStream pdfOut = new ByteArrayOutputStream();
+                Docx4J.toPDF(wordMLPackage, pdfOut);
+                pdfOut.close();
+                logger.info("PDF generado con docx4j desde template: {}", templateName);
+                return pdfOut.toByteArray();
+            } catch (Exception docxEx) {
+                logger.error("docx4j falló, usando Gotenberg fallback: {}", docxEx.getMessage());
+                if (!gotenbergUrl.isBlank()) {
+                    ByteArrayResource docxResource = new ByteArrayResource(docxBytes) {
+                        @Override
+                        public String getFilename() {
+                            return "input.docx";
+                        }
+                    };
+                    MultiValueMap<String, Object> formData = new LinkedMultiValueMap<>();
+                    formData.add("files", docxResource);
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+                    HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(formData, headers);
+                    ResponseEntity<byte[]> response = restTemplate.postForEntity(gotenbergUrl, requestEntity, byte[].class);
+                    if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                        logger.info("PDF generado con Gotenberg fallback");
+                        return response.getBody();
+                    }
+                }
+                throw new RuntimeException("Todas conversiones PDF fallaron", docxEx);
+            }
         }
     }
 
