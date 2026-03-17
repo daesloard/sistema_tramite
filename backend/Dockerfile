@@ -15,9 +15,12 @@ RUN --mount=type=cache,target=/root/.m2 \
 
 COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 \
-	./mvnw -B -ntp -DskipTests -Dmaven.wagon.http.retryHandler.count=3 clean package
+	./mvnw -B -ntp -DskipTests -Dmaven.wagon.http.retryHandler.count=3 clean package -Dspring-boot.repackage.skip=false
 
+FROM eclipse-temurin:21-jre
+WORKDIR /app
 
+COPY --from=build /app/target/backend-0.0.1-SNAPSHOT.jar app.jar
 
 ENV JAVA_OPTS=""
 EXPOSE 8080
