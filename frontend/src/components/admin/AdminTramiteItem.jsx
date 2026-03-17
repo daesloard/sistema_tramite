@@ -50,11 +50,11 @@ export default function AdminTramiteItem({
                 <td style={styles.td}>{tramite.tipoTramite}</td>
                 <td style={styles.td}>
                     <span style={{ ...styles.badge, ...getEstadoBadgeStyle(tramite.estado) }}>{tramite.estado}</span>
-                    {documentStatus && (
-                        faltantesDocumentales.length > 0
-                            ? <div style={styles.badgeDocsPendientes}>Faltan {faltantesDocumentales.length} documento(s)</div>
-                            : <div style={styles.badgeDocsOk}>Documentos en regla</div>
-                    )}
+                                {documentStatus && (
+                                    faltantesDocumentales.length > 0
+                                        ? <div style={styles.badgeDocsPendientes}>Faltan {faltantesDocumentales.length} documento(s)</div>
+                                        : (tramite.estado !== 'RECHAZADO' ? <div style={styles.badgeDocsOk}>Documentos en regla</div> : <div style={styles.badgeDocsOk}>Documentos verificados</div>)
+                                )}
                 </td>
                 <td style={styles.td}>{formatoFecha(tramite.fechaRadicacion)}</td>
                 <td style={styles.td}>{formatoFecha(tramite.fechaVencimiento)}</td>
