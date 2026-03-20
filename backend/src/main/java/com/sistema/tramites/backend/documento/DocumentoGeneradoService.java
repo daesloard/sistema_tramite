@@ -5,6 +5,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
+package com.sistema.tramites.backend.documento;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+@Service
 public class DocumentoGeneradoService {
 
     @Autowired
@@ -18,7 +25,7 @@ public class DocumentoGeneradoService {
 
     /**
      * Genera PDF a partir de plantilla DOCX con marcadores {{ }}.
-     * 
+     *
      * Flujo para producción (con Docker):
      * 1. docxtemplater-service (Node.js) reemplaza marcadores {{ }} SIN modificar formato
      * 2. Gotenberg convierte DOCX → PDF preservando diseño exacto
@@ -51,33 +58,32 @@ public class DocumentoGeneradoService {
         }
     }
 
-        public String obtenerNombrePlantilla(com.sistema.tramites.backend.tramite.Tramite tramite, boolean aprobado) {
-            // Si no fue aprobado, usar plantilla NEGATIVA
-            if (!aprobado || tramite.getVerificacionAprobada() != null && !tramite.getVerificacionAprobada()) {
-                return "RESPUESTA NEGATIVA.docx";
-            }
-            
-            // Usar tipo_certificado para seleccionar la plantilla correcta
-            String tipoCertificado = tramite.getTipo_certificado() != null ? tramite.getTipo_certificado().trim().toUpperCase() : "";
-            
-            switch (tipoCertificado) {
-                case "SISBEN":
-                case "CERTIFICADO_SISBEN":
-                    return "CARTA RESIDENCIA SISBEN.docx";
-                case "ELECTORAL":
-                case "CERTIFICADO_ELECTORAL":
-                case "REGISTRADURIA NACIONAL":
-                    return "CARTA RESIDENCIA REGISTRADURIA NACIONAL.docx";
-                case "JAC":
-                case "JUNTA DE ACCION":
-                case "CERTIFICADO_RESIDENCIA":
-                    return "CARTA RESIDENCIA JUNTA DE ACCION.docx";
-                default:
-                    // Por defecto usar JUNTA DE ACCION
-                    System.out.println("[PLANTILLA] Tipo de certificado no reconocido: '" + tipoCertificado + "', usando JUNTA DE ACCION por defecto");
-                    return "CARTA RESIDENCIA JUNTA DE ACCION.docx";
-            }
+    public String obtenerNombrePlantilla(com.sistema.tramites.backend.tramite.Tramite tramite, boolean aprobado) {
+        // Si no fue aprobado, usar plantilla NEGATIVA
+        if (!aprobado || tramite.getVerificacionAprobada() != null && !tramite.getVerificacionAprobada()) {
+            return "RESPUESTA NEGATIVA.docx";
         }
+
+        // Usar tipo_certificado para seleccionar la plantilla correcta
+        String tipoCertificado = tramite.getTipo_certificado() != null ? tramite.getTipo_certificado().trim().toUpperCase() : "";
+        switch (tipoCertificado) {
+            case "SISBEN":
+            case "CERTIFICADO_SISBEN":
+                return "CARTA RESIDENCIA SISBEN.docx";
+            case "ELECTORAL":
+            case "CERTIFICADO_ELECTORAL":
+            case "REGISTRADURIA NACIONAL":
+                return "CARTA RESIDENCIA REGISTRADURIA NACIONAL.docx";
+            case "JAC":
+            case "JUNTA DE ACCION":
+            case "CERTIFICADO_RESIDENCIA":
+                return "CARTA RESIDENCIA JUNTA DE ACCION.docx";
+            default:
+                // Por defecto usar JUNTA DE ACCION
+                System.out.println("[PLANTILLA] Tipo de certificado no reconocido: '" + tipoCertificado + "', usando JUNTA DE ACCION por defecto");
+                return "CARTA RESIDENCIA JUNTA DE ACCION.docx";
+        }
+    }
 
     public byte[] convertirDocxAGotenberg(byte[] docxBytes) throws Exception {
         // Adaptar a multipart/form-data
@@ -117,6 +123,29 @@ public class DocumentoGeneradoService {
         public String generarTextoDocumento(com.sistema.tramites.backend.tramite.Tramite tramite, boolean aprobado, String observacion) throws Exception {
             // Lógica básica: solo retorna un resumen textual
             String plantilla = obtenerNombrePlantilla(tramite, aprobado);
+            return "Documento generado: " + plantilla + " para trámite " + tramite.getNumeroRadicado();
+        }
+
+        /**
+         * Genera una vista previa HTML del documento.
+         */
+        public String generarHtmlPreview(com.sistema.tramites.backend.tramite.Tramite tramite, boolean aprobado, String observacion) throws Exception {
+            // Lógica básica: retorna HTML simple
+            String plantilla = obtenerNombrePlantilla(tramite, aprobado);
+            return "<div><b>Vista previa:</b> " + plantilla + " para trámite " + tramite.getNumeroRadicado() + "</div>";
+        }
+
+        /**
+         * Genera PDF y lo adjunta al trámite (flujo especial).
+         */
+        public void generarYAdjuntarPdf(com.sistema.tramites.backend.tramite.Tramite tramite, boolean aprobado, String observacion) throws Exception {
+            byte[] pdf = generarPdfDocumento(tramite, aprobado, observacion);
+            tramite.setContenidoPdfGenerado(pdf);
+            tramite.setNombrePdfGenerado("certificado.pdf");
+            tramite.setMotorPdfGenerado("Gotenberg");
+            tramite.setHashDocumentoGenerado(com.sistema.tramites.backend.util.HashUtils.sha256Hex(pdf));
+        }
+}
             return "Documento generado: " + plantilla + " para trámite " + tramite.getNumeroRadicado();
         }
 
