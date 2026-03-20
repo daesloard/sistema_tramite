@@ -1,4 +1,6 @@
+// ...existing code...
 package com.sistema.tramites.backend.tramite;
+import com.sistema.tramites.backend.documento.DocxtemplaterService;
 
 import com.sistema.tramites.backend.auditoria.AuditoriaTramite;
 import com.sistema.tramites.backend.auditoria.AuditoriaTramiteService;
@@ -25,17 +27,20 @@ public class CertificadoQueryService {
     private final UsuarioRepository usuarioRepository;
     private final DriveStorageService driveStorageService;
     private final DocumentoGeneradoService documentoGeneradoService;
+    private final DocxtemplaterService docxtemplaterService;
     private final AuditoriaTramiteService auditoriaTramiteService;
 
     public CertificadoQueryService(TramiteRepository tramiteRepository,
                                    UsuarioRepository usuarioRepository,
                                    DriveStorageService driveStorageService,
                                    DocumentoGeneradoService documentoGeneradoService,
+                                   DocxtemplaterService docxtemplaterService,
                                    AuditoriaTramiteService auditoriaTramiteService) {
         this.tramiteRepository = tramiteRepository;
         this.usuarioRepository = usuarioRepository;
         this.driveStorageService = driveStorageService;
         this.documentoGeneradoService = documentoGeneradoService;
+        this.docxtemplaterService = docxtemplaterService;
         this.auditoriaTramiteService = auditoriaTramiteService;
     }
 
@@ -201,16 +206,17 @@ public class CertificadoQueryService {
     public Map<String, Object> vistaPreviaDocumento(Long id, boolean includePdf, String usernameHeader, String adminUsernameHeader) {
         Tramite tramite = tramiteRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Trámite no encontrado"));
         boolean aprobado = esDecisionAprobada(tramite);
-        String contenido = documentoGeneradoService.generarTextoDocumento(tramite, aprobado, tramite.getObservaciones() != null ? tramite.getObservaciones() : "");
-        String html = documentoGeneradoService.generarHtmlPreview(tramite, aprobado, tramite.getObservaciones() != null ? tramite.getObservaciones() : "");
-
-
+        String contenido = ""; // Eliminar lógica antigua
+        String html = ""; // Eliminar lógica antigua
 
         byte[] pdfVistaPrevia = null;
         String errorPdf = null;
         if (includePdf) {
-            try { pdfVistaPrevia = documentoGeneradoService.generarPdfDocumento(tramite, aprobado, tramite.getObservaciones()); }
-            catch (Exception ex) { errorPdf = ex.getMessage(); }
+            try {
+                String plantilla = documentoGeneradoService.obtenerNombrePlantilla(tramite, aprobado);
+                byte[] docxProcesado = docxtemplaterService.processTemplate(plantilla, tramite, aprobado, null);
+                pdfVistaPrevia = documentoGeneradoService.convertirDocxAGotenberg(docxProcesado);
+            } catch (Exception ex) { errorPdf = ex.getMessage(); }
         }
 
         Map<String, Object> respuesta = new HashMap<>();
@@ -218,15 +224,27 @@ public class CertificadoQueryService {
         respuesta.put("numeroRadicado", tramite.getNumeroRadicado());
         respuesta.put("estado", tramite.getEstado() != null ? tramite.getEstado().name() : null);
         String templateName;
-        if (!aprobado) {
+        if (!aprobado || tramite.getVerificacionAprobada() != null && !tramite.getVerificacionAprobada()) {
             templateName = "RESPUESTA NEGATIVA.docx";
         } else {
             String tipo = (tramite.getTipo_certificado() != null ? tramite.getTipo_certificado().trim() : "");
             switch (tipo.toUpperCase()) {
-                case "JUNTA DE ACCION": case "JAC": templateName = "CARTA RESIDENCIA JUNTA DE ACCION.docx"; break;
-                case "REGISTRADURIA NACIONAL": case "REGISTRADURIA": case "ELECTORAL": templateName = "CARTA RESIDENCIA REGISTRADURIA NACIONAL.docx"; break;
-                case "SISBEN": templateName = "CARTA RESIDENCIA SISBEN.docx"; break;
-                default: templateName = "CARTA RESIDENCIA JUNTA DE ACCION.docx";
+                case "SISBEN":
+                case "CERTIFICADO_SISBEN":
+                    templateName = "CARTA RESIDENCIA SISBEN.docx";
+                    break;
+                case "ELECTORAL":
+                case "CERTIFICADO_ELECTORAL":
+                case "REGISTRADURIA NACIONAL":
+                case "REGISTRADURIA":
+                    templateName = "CARTA RESIDENCIA REGISTRADURIA NACIONAL.docx";
+                    break;
+                case "JAC":
+                case "JUNTA DE ACCION":
+                case "CERTIFICADO_RESIDENCIA":
+                default:
+                    templateName = "CARTA RESIDENCIA JUNTA DE ACCION.docx";
+                    break;
             }
         }
         respuesta.put("plantilla", templateName);

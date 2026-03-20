@@ -16,6 +16,21 @@ import java.util.Base64;
 @RestController
 @RequestMapping("/api/tramites")
 public class TramiteController {
+        @PostMapping("/{id}/regenerar-pdf")
+        public ResponseEntity<?> regenerarPdf(@PathVariable Long id) {
+            try {
+                tramiteService.regenerarPdf(id);
+                return ResponseEntity.ok(Map.of("status", "ok", "message", "PDF regenerado correctamente"));
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("status", "error", "message", e.getMessage()));
+            } catch (Exception e) {
+                String detalle = e.getMessage();
+                if (e.getCause() != null) {
+                    detalle += " | Causa: " + e.getCause().getMessage();
+                }
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("status", "error", "message", "Error al regenerar PDF: " + detalle));
+            }
+        }
     private final TramiteService tramiteService;
     private final RadicacionService radicacionService;
     private final VerificacionService verificacionService;

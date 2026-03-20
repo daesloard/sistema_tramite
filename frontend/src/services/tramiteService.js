@@ -1,3 +1,14 @@
+export async function regenerarPdf(tramiteId) {
+    const response = await fetch(`${API_URL}/${tramiteId}/regenerar-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || 'No se pudo regenerar el PDF');
+    }
+    return response.json();
+}
 import { API_TRAMITES_URL } from '../config/api';
 
 const API_URL = API_TRAMITES_URL;

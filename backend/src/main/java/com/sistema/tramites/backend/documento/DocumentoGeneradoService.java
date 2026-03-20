@@ -110,5 +110,34 @@ public class DocumentoGeneradoService {
     public org.springframework.core.io.ResourceLoader getResourceLoader() {
         return new org.springframework.core.io.DefaultResourceLoader();
     }
+
+        /**
+         * Genera texto plano a partir de la plantilla y datos del trámite.
+         */
+        public String generarTextoDocumento(com.sistema.tramites.backend.tramite.Tramite tramite, boolean aprobado, String observacion) throws Exception {
+            // Lógica básica: solo retorna un resumen textual
+            String plantilla = obtenerNombrePlantilla(tramite, aprobado);
+            return "Documento generado: " + plantilla + " para trámite " + tramite.getNumeroRadicado();
+        }
+
+        /**
+         * Genera una vista previa HTML del documento.
+         */
+        public String generarHtmlPreview(com.sistema.tramites.backend.tramite.Tramite tramite, boolean aprobado, String observacion) throws Exception {
+            // Lógica básica: retorna HTML simple
+            String plantilla = obtenerNombrePlantilla(tramite, aprobado);
+            return "<div><b>Vista previa:</b> " + plantilla + " para trámite " + tramite.getNumeroRadicado() + "</div>";
+        }
+
+        /**
+         * Genera PDF y lo adjunta al trámite (flujo especial).
+         */
+        public void generarYAdjuntarPdf(com.sistema.tramites.backend.tramite.Tramite tramite, boolean aprobado, String observacion) throws Exception {
+            byte[] pdf = generarPdfDocumento(tramite, aprobado, observacion);
+            tramite.setContenidoPdfGenerado(pdf);
+            tramite.setNombrePdfGenerado("certificado.pdf");
+            tramite.setMotorPdfGenerado("Gotenberg");
+            tramite.setHashDocumentoGenerado(com.sistema.tramites.backend.util.HashUtils.sha256Hex(pdf));
+        }
 }
 

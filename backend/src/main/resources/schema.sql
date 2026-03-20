@@ -2,9 +2,7 @@
 -- BASE DE DATOS: SISTEMA DE TRÁMITES MUNICIPALES
 -- ========================================
 
--- Crear base de datos
-CREATE DATABASE IF NOT EXISTS tramites_municipales;
-USE tramites_municipales;
+-- H2 compatible
 
 -- ========================================
 -- TABLA: USUARIOS (Verificadores y Alcaldes)
@@ -15,14 +13,11 @@ CREATE TABLE IF NOT EXISTS usuarios (
     email VARCHAR(255) NOT NULL,
     username VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(500) NOT NULL,
-    rol ENUM('VERIFICADOR', 'ALCALDE', 'ADMINISTRADOR') NOT NULL DEFAULT 'VERIFICADOR',
+    rol VARCHAR(20) NOT NULL DEFAULT 'VERIFICADOR',
     activo BOOLEAN DEFAULT TRUE,
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fecha_ultim_acceso TIMESTAMP NULL,
-    INDEX idx_username (username),
-    INDEX idx_email (email),
-    INDEX idx_rol (rol)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    fecha_ultim_acceso TIMESTAMP NULL
+);
 
 -- ========================================
 -- TABLA: TRAMITES (Solicitudes de Certificado)
@@ -33,7 +28,7 @@ CREATE TABLE IF NOT EXISTS tramites (
     -- Identificación del trámite
     numero_radicado VARCHAR(50) NOT NULL UNIQUE,
     tipo_tramite VARCHAR(100) NOT NULL,
-    estado ENUM('RADICADO', 'EN_VALIDACION', 'EN_FIRMA', 'FINALIZADO', 'RECHAZADO') NOT NULL DEFAULT 'RADICADO',
+    estado VARCHAR(30) NOT NULL DEFAULT 'RADICADO',
     
     -- Información del solicitante
     nombre_solicitante VARCHAR(255) NOT NULL,

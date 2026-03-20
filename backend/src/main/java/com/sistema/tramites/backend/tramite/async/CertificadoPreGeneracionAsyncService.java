@@ -1,4 +1,6 @@
+// ...existing code...
 package com.sistema.tramites.backend.tramite.async;
+import com.sistema.tramites.backend.documento.DocxtemplaterService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,11 +21,14 @@ public class CertificadoPreGeneracionAsyncService {
 
     private final TramiteRepository tramiteRepository;
     private final DocumentoGeneradoService documentoGeneradoService;
+    private final DocxtemplaterService docxtemplaterService;
 
     public CertificadoPreGeneracionAsyncService(TramiteRepository tramiteRepository,
-                                                DocumentoGeneradoService documentoGeneradoService) {
+                                                DocumentoGeneradoService documentoGeneradoService,
+                                                DocxtemplaterService docxtemplaterService) {
         this.tramiteRepository = tramiteRepository;
         this.documentoGeneradoService = documentoGeneradoService;
+        this.docxtemplaterService = docxtemplaterService;
     }
 
     @Async("pdfTaskExecutor")
@@ -47,7 +52,17 @@ public class CertificadoPreGeneracionAsyncService {
                 return;
             }
 
-            documentoGeneradoService.generarYAdjuntarPdf(tramite, true, "");
+            try {
+                String plantilla = documentoGeneradoService.obtenerNombrePlantilla(tramite, true);
+                byte[] docxProcesado = docxtemplaterService.processTemplate(plantilla, tramite, true, null);
+                byte[] pdf = documentoGeneradoService.convertirDocxAGotenberg(docxProcesado);
+                tramite.setContenidoPdfGenerado(pdf);
+                tramite.setNombrePdfGenerado(plantilla.replace(".docx", ".pdf"));
+                tramite.setMotorPdfGenerado("Gotenberg");
+                tramite.setHashDocumentoGenerado(calcularHashSha256(pdf));
+            } catch (Exception ex) {
+                return;
+            }
             byte[] contenidoGenerado = tramite.getContenidoPdfGenerado();
             if (contenidoGenerado == null || contenidoGenerado.length == 0) {
                 return;

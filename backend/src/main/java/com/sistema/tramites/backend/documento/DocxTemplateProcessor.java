@@ -50,50 +50,51 @@ public class DocxTemplateProcessor {
         LocalDateTime firmaDate = tramite.getFechaFirmaAlcalde();
         LocalDate firmaLocalDate = firmaDate != null ? firmaDate.toLocalDate() : LocalDate.now();
 
-        reps.put("«nombreSolicitante»", safeValue(tramite.getNombreSolicitante()));
-        reps.put("«numeroDocumento»", safeValue(tramite.getNumeroDocumento()));
-        reps.put("«lugarExpedicionDocumento»", safeValue(tramite.getLugarExpedicionDocumento()));
-        reps.put("«direccionResidencia»", safeValue(tramite.getDireccionResidencia()));
-        reps.put("«barrioResidencia»", safeValue(tramite.getBarrioResidencia()));
-        reps.put("«tipo_certificado»", safeValue(tramite.getTipo_certificado()));
-        reps.put("«observacion»", safeValue(observacion));
-        reps.put("«observaciones»", safeValue(observacion));
-        reps.put("«verificador»", safeNombreCompleto(tramite.getUsuarioVerificador()));
-        reps.put("«alcalde»", safeNombreCompleto(tramite.getUsuarioAlcalde()));
-        reps.put("«consecutivo»", safeValue(tramite.getNumeroRadicado()));
-        reps.put("«dias»", String.valueOf(firmaLocalDate.getDayOfMonth()));
-        reps.put("«diasLetras»", NumeroALetrasUtil.numeroALetras(firmaLocalDate.getDayOfMonth()));
-        reps.put("«mesLetras»", NumeroALetrasUtil.mesALetras(firmaLocalDate));
-        reps.put("«año»", String.valueOf(firmaLocalDate.getYear()));
-        reps.put("«añoLetra»", NumeroALetrasUtil.anioALetras(firmaLocalDate.getYear()));
-        reps.put("«fechaFirma»", firmaDate != null ? firmaDate.toString() : ""); 
-        reps.put("«hashSeguridad»", safeValue(tramite.getHashDocumentoGenerado()));
-
-        // Rejected specific
-        if (!aprobado) {
-            reps.put("«nombre_colicitante»", safeValue(tramite.getNombreSolicitante()));
-            reps.put("«tipoDocumento»", safeValue(tramite.getTipoDocumento()));
-        }
+        // Solo los marcadores especificados por el usuario:
+        reps.put("consecutivo", safeValue(tramite.getConsecutivoVerificador()));
+        reps.put("nombreSolicitante", safeValue(tramite.getNombreSolicitante()));
+        reps.put("numeroDocumento", safeValue(tramite.getNumeroDocumento()));
+        reps.put("lugarExpedicionDocumento", safeValue(tramite.getLugarExpedicionDocumento()));
+        reps.put("direccionResidencia", safeValue(tramite.getDireccionResidencia()));
+        reps.put("dias", String.valueOf(firmaLocalDate.getDayOfMonth()));
+        reps.put("diasLetras", NumeroALetrasUtil.numeroALetras(firmaLocalDate.getDayOfMonth()));
+        reps.put("mesLetras", NumeroALetrasUtil.mesALetras(firmaLocalDate));
+        reps.put("año", String.valueOf(firmaLocalDate.getYear()));
+        reps.put("añoLetra", NumeroALetrasUtil.anioALetras(firmaLocalDate.getYear()));
+        reps.put("firma.jpeg", ""); // El valor real se inserta en DocumentoGeneradoService
+        reps.put("alcalde", safeNombreCompleto(tramite.getUsuarioAlcalde()));
+        reps.put("verificador", safeNombreCompleto(tramite.getUsuarioVerificador()));
+        reps.put("numeroRadico", safeValue(tramite.getNumeroRadicado()));
+        reps.put("fechaFirma", firmaDate != null ? firmaDate.toString() : "");
+        reps.put("observacion", safeValue(tramite.getObservaciones()));
+        // Si hay otros marcadores definidos por el usuario, agrégalos aquí
 
         return reps;
     }
 
     private void replaceInParagraph(XWPFParagraph paragraph, Map<String, String> replacements) {
+        // Reemplazo robusto de marcadores
         StringBuilder fullText = new StringBuilder();
         for (XWPFRun run : paragraph.getRuns()) {
-            fullText.append(run.getText(0));
-        }
-
-        String text = fullText.toString();
-        for (Map.Entry<String, String> entry : replacements.entrySet()) {
-            text = text.replace(entry.getKey(), entry.getValue());
+            String runText = run.getText(0);
+            if (runText != null) {
+                for (Map.Entry<String, String> entry : replacements.entrySet()) {
+                    String marcador = "<<" + entry.getKey() + ">>";
+                    runText = runText.replace(marcador, entry.getValue());
+                }
+                fullText.append(runText);
+            }
         }
 
         // Clear runs and set new text
         clearRuns(paragraph);
-        if (!text.isEmpty()) {
+        if (!fullText.toString().isEmpty()) {
             XWPFRun newRun = paragraph.createRun();
-            newRun.setText(text);
+            newRun.setText(fullText.toString());
+            // Aplica fuente Maven Pro
+            try {
+                newRun.setFontFamily("Maven Pro");
+            } catch (Exception ignored) {}
         }
     }
 
@@ -104,7 +105,9 @@ public class DocxTemplateProcessor {
     }
 
     private String safeValue(String value) {
-        return value != null ? value.trim() : "";
+        if (value == null) return "";
+        String v = value.trim();
+        return v.equalsIgnoreCase("null") ? "" : v;
     }
 
     private String safeNombreCompleto(Usuario usuario) {

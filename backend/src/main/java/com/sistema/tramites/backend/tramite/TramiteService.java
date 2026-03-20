@@ -2,12 +2,108 @@ package com.sistema.tramites.backend.tramite;
 
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import com.sistema.tramites.backend.util.TramiteUtils;
 import java.util.*;
 
 @Service
 public class TramiteService {
+        // Lógica para obtener la firma en base64
+        private String obtenerFirmaBase64(Tramite tramite) {
+            // Si la firma es byte[] (preferido)
+            try {
+                Object firma = tramite.getFirmaAlcalde();
+                if (firma instanceof byte[] firmaBytes) {
+                    return java.util.Base64.getEncoder().encodeToString(firmaBytes);
+                }
+                if (firma instanceof String firmaStr) {
+                    // Si ya es base64, devolver tal cual
+                    return firmaStr;
+                }
+            } catch (Exception ignored) {}
+            return "";
+        }
+
+        // Lógica para determinar si el trámite está aprobado
+        private boolean esDecisionAprobada(Tramite tramite) {
+            // Ejemplo: si tienes un campo verificacionAprobada
+            return tramite.getVerificacionAprobada() != null && tramite.getVerificacionAprobada();
+        }
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.sistema.tramites.backend.documento.DocumentoGeneradoService documentoGeneradoService;
+
+    // Limpiar contador de notificaciones por trámite
+    private void limpiarNotificacionesPorTramite(Long tramiteId) {
+        try {
+            var field = com.sistema.tramites.backend.documento.DocumentoGeneradoService.class.getDeclaredField("notificacionesPorTramite");
+            field.setAccessible(true);
+            var map = (java.util.Map<Long, Integer>) field.get(documentoGeneradoService);
+            if (map != null) map.remove(tramiteId);
+        } catch (Exception ignored) {}
+    }
+
+    public void regenerarPdf(Long tramiteId) {
+        Tramite tramite = tramiteRepository.findById(tramiteId)
+            .orElseThrow(() -> new IllegalArgumentException("Trámite no encontrado"));
+        try {
+            // Seleccionar plantilla según tipo de trámite
+            String tipo = tramite.getTipoTramite() != null ? tramite.getTipoTramite().trim().toUpperCase() : "";
+            String plantilla;
+            switch (tipo) {
+                case "JUNTA DE ACCION":
+                case "CERTIFICADO_RESIDENCIA":
+                    plantilla = "CARTA RESIDENCIA JUNTA DE ACCION.docx";
+                    break;
+                case "REGISTRADURIA NACIONAL":
+                    plantilla = "CARTA RESIDENCIA REGISTRADURIA NACIONAL.docx";
+                    break;
+                case "SISBEN":
+                case "CERTIFICADO_SISBEN":
+                    plantilla = "CARTA RESIDENCIA SISBEN.docx";
+                    break;
+                case "NEGATIVA":
+                case "CERTIFICADO_NEGATIVO":
+                    plantilla = "RESPUESTA NEGATIVA.docx";
+                    break;
+                default:
+                    throw new RuntimeException("Tipo de trámite desconocido: " + tipo);
+            }
+            java.util.Map<String, String> datos = new java.util.HashMap<>();
+            datos.put("consecutivo", tramite.getConsecutivoVerificador() != null ? tramite.getConsecutivoVerificador() : "");
+            datos.put("nombreSolicitante", tramite.getNombreSolicitante() != null ? tramite.getNombreSolicitante() : "");
+            datos.put("numeroDocumento", tramite.getNumeroDocumento() != null ? tramite.getNumeroDocumento() : "");
+            datos.put("lugarExpedicionDocumento", tramite.getLugarExpedicionDocumento() != null ? tramite.getLugarExpedicionDocumento() : "");
+            datos.put("direccionResidencia", tramite.getDireccionResidencia() != null ? tramite.getDireccionResidencia() : "");
+            LocalDate fechaFirma = tramite.getFechaFirmaAlcalde() != null ? tramite.getFechaFirmaAlcalde().toLocalDate() : LocalDate.now();
+            datos.put("dias", String.valueOf(fechaFirma.getDayOfMonth()));
+            datos.put("diasLetras", com.sistema.tramites.backend.util.NumeroALetrasUtil.numeroALetras(fechaFirma.getDayOfMonth()));
+            datos.put("mesLetras", com.sistema.tramites.backend.util.NumeroALetrasUtil.mesALetras(fechaFirma));
+            datos.put("año", String.valueOf(fechaFirma.getYear()));
+            datos.put("añoLetra", com.sistema.tramites.backend.util.NumeroALetrasUtil.anioALetras(fechaFirma.getYear()));
+            datos.put("firma.jpeg", obtenerFirmaBase64(tramite)); // Para imágenes, se requiere lógica especial
+            datos.put("alcalde", tramite.getUsuarioAlcalde() != null ? tramite.getUsuarioAlcalde().getNombreCompleto() : "");
+            datos.put("verificador", tramite.getUsuarioVerificador() != null ? tramite.getUsuarioVerificador().getNombreCompleto() : "");
+            datos.put("numeroRadico", tramite.getNumeroRadicado() != null ? tramite.getNumeroRadicado() : "");
+            datos.put("fechaFirma", tramite.getFechaFirmaAlcalde() != null ? tramite.getFechaFirmaAlcalde().toString() : "");
+            datos.put("observacion", tramite.getObservaciones() != null ? tramite.getObservaciones() : "");
+
+            // Puedes agregar lógica para calcular los valores en letras y fechas
+
+            boolean aprobado = esDecisionAprobada(tramite);
+            String observacion = tramite.getObservaciones() != null ? tramite.getObservaciones() : "";
+            byte[] pdf = documentoGeneradoService.generarPdfDocumento(tramite, aprobado, observacion);
+            tramite.setContenidoPdfGenerado(pdf);
+            tramite.setNombrePdfGenerado(plantilla.replace(".docx", ".pdf"));
+            tramite.setTipoContenidoPdfGenerado("application/pdf");
+            tramite.setMotorPdfGenerado("Gotenberg");
+            tramite.setHashDocumentoGenerado(com.sistema.tramites.backend.util.HashUtils.sha256Hex(pdf));
+        } catch (Exception ex) {
+            throw new RuntimeException("Error al generar PDF con Gotenberg", ex);
+        }
+        tramiteRepository.save(tramite);
+        limpiarNotificacionesPorTramite(tramiteId);
+    }
 
     private final TramiteRepository tramiteRepository;
     private final TramiteUtils tramiteUtils;

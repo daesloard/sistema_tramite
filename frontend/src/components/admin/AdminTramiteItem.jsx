@@ -1,4 +1,5 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
+import { regenerarPdf } from '../../services/tramiteService';
 
 export default function AdminTramiteItem({
     tramite,
@@ -28,6 +29,8 @@ export default function AdminTramiteItem({
     formatoFechaHora,
     styles
 }) {
+    const [regenerandoPdf, setRegenerandoPdf] = useState(false);
+    const [mensajePdf, setMensajePdf] = useState('');
     const documentosAdmin = obtenerDocumentos(tramite);
     const faltantesDocumentales = obtenerFaltantesDocumentales(tramite.id, documentosAdmin);
     const certificadoGeneradoDisponible = !!documentStatus?.certificadoGeneradoDisponible;
@@ -86,6 +89,14 @@ export default function AdminTramiteItem({
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Fecha Vigencia:</span> {formatoFecha(tramite.fechaVigencia)}</p>
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Observaciones:</span> {tramite.observaciones || '-'}</p>
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Certificado generado:</span> {certificadoGeneradoDisponible ? 'Disponible' : 'Pendiente'}</p>
+                                {!certificadoGeneradoDisponible && (
+                                    <button
+                                        style={{ ...styles.btnDocDesc, marginTop: 8 }}
+                                        onClick={() => regenerarPdf(tramite.id)}
+                                    >
+                                        🔄 Regenerar PDF
+                                    </button>
+                                )}
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Almacenamiento certificado final:</span> {almacenamientoCertificadoGenerado}</p>
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Drive habilitado:</span> {documentStatus?.driveHabilitado ? 'Sí' : 'No'}</p>
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Carpeta Drive trámite:</span> {documentStatus?.driveFolderId || '-'}</p>
@@ -140,7 +151,32 @@ export default function AdminTramiteItem({
                                         <div style={styles.adminDocBtns}>
                                             <button style={styles.btnDocVer} onClick={() => abrirDocumentoGenerado(tramite.id)}>Ver</button>
                                             <button style={styles.btnDocDesc} onClick={() => descargarDocumentoGenerado(tramite.id, tramite.numeroRadicado)}>Descargar</button>
+                                            {!certificadoGeneradoDisponible && (
+                                                <button
+                                                    style={{ ...styles.btnDocDesc, marginLeft: 8 }}
+                                                    disabled={regenerandoPdf}
+                                                    onClick={async () => {
+                                                        setRegenerandoPdf(true);
+                                                        setMensajePdf('');
+                                                        try {
+                                                            const resp = await regenerarPdf(tramite.id);
+                                                            setMensajePdf(resp.message || 'PDF regenerado correctamente');
+                                                        } catch (err) {
+                                                            setMensajePdf(err.message || 'Error al regenerar PDF');
+                                                        } finally {
+                                                            setRegenerandoPdf(false);
+                                                        }
+                                                    }}
+                                                >
+                                                    {regenerandoPdf ? 'Regenerando...' : '🔄 Regenerar PDF'}
+                                                </button>
+                                            )}
                                         </div>
+                                        {mensajePdf && (
+                                            <div style={{ color: mensajePdf.includes('Error') ? '#d32f2f' : '#166534', marginTop: 8 }}>
+                                                {mensajePdf}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
