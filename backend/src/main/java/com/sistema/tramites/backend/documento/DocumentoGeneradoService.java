@@ -29,34 +29,6 @@ public class DocumentoGeneradoService {
         // Paso 1: Procesar plantilla con docxtemplater (Node.js)
         byte[] docxProcesado;
         try {
-            // Filtrar marcadores según plantilla
-            Map<String, Object> markers = new HashMap<>();
-            markers.put("NOMBRE_COMPLETO", tramite.getNombreCompleto());
-            markers.put("NUMERO_DOCUMENTO", tramite.getNumeroDocumento());
-            markers.put("FECHA_NACIMIENTO", tramite.getFechaNacimiento());
-            markers.put("TIPO_DOCUMENTO", tramite.getTipoDocumento());
-            markers.put("NOMBRE_TRAMITE", tramite.getNombreTramite());
-            markers.put("FECHA_RADICACION", tramite.getFechaRadicacion());
-            markers.put("NUMERO_RADICADO", tramite.getNumeroRadicado());
-            markers.put("NOMBRE_ENTIDAD", tramite.getNombreEntidad());
-            markers.put("NOMBRE_FUNCIONARIO", tramite.getNombreFuncionario());
-            markers.put("CARGO_FUNCIONARIO", tramite.getCargoFuncionario());
-            markers.put("FIRMA_FUNCIONARIO", tramite.getFirmaFuncionario());
-            markers.put("SELLO_ENTIDAD", tramite.getSelloEntidad());
-            // Si la plantilla requiere foto, QR o fecha/certificado, incluir
-            if (plantillaContieneMarcador("FOTO_USUARIO", templateName)) {
-                markers.put("FOTO_USUARIO", tramite.getFotoUsuario());
-            }
-            if (plantillaContieneMarcador("QR_CERTIFICADO", templateName)) {
-                markers.put("QR_CERTIFICADO", tramite.getQrCertificado());
-            }
-            if (plantillaContieneMarcador("FECHA_CERTIFICADO", templateName)) {
-                markers.put("FECHA_CERTIFICADO", tramite.getFechaCertificado());
-            }
-            if (plantillaContieneMarcador("NUMERO_CERTIFICADO", templateName)) {
-                markers.put("NUMERO_CERTIFICADO", tramite.getNumeroCertificado());
-            }
-            // Enviar solo los marcadores relevantes
             docxProcesado = docxtemplaterService.processTemplate(templateName, tramite, aprobado, observacion);
             System.out.println("[DOCXTEMPLATER] Plantilla procesada: " + templateName);
         } catch (Exception e) {
@@ -120,21 +92,9 @@ public class DocumentoGeneradoService {
         bos.write(("--" + boundary + "--" + CRLF).getBytes());
         byte[] multipartBody = bos.toByteArray();
 
-        // Construir URL con parámetros de seguridad para proteger contra edición
-        // https://gotenberg.dev/docs/routes#convert-route
-        String securityUrl = gotenbergUrl + 
-            "?pdfa=1" +  // PDF/A-1b para mayor compatibilidad
-            "&pdfa=1b" +
-            "&nativePageRanges=" +  // Todas las páginas
-            "&pdfFormValues=" +  // Prevenir llenado de formularios
-            "&allowPrint=true" +  // Permitir impresión
-            "&allowCopy=false" +  // NO permitir copiar texto
-            "&allowModifyContents=false" +  // NO permitir modificar
-            "&allowModifyAnnotations=false";  // NO permitir anotaciones
-
         java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
         java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(securityUrl))
+            .uri(java.net.URI.create(gotenbergUrl))
             .header("Content-Type", "multipart/form-data; boundary=" + boundary)
             .header("Accept", "application/pdf")
             .POST(java.net.http.HttpRequest.BodyPublishers.ofByteArray(multipartBody))
