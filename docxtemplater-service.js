@@ -274,8 +274,9 @@ app.post('/render-docx', upload.fields([{ name: 'files', maxCount: 1 }, { name: 
     }
 });
 
-app.listen(3001, () => {
-    console.log('Docxtemplater service listening on port 3001');
+const PORT = Number(process.env.PORT || 3001);
+app.listen(PORT, () => {
+    console.log(`Docxtemplater service listening on port ${PORT}`);
     console.log('DOCXTEMPLATER_ENABLE_SIGNATURE_IMAGE =', enableSignatureImage);
     console.log('DOCXTEMPLATER_FORCE_UPPERCASE =', forceUppercaseValues);
 });
