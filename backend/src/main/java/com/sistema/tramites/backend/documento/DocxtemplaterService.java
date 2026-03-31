@@ -23,7 +23,7 @@ import java.util.Map;
 @Service
 public class DocxtemplaterService {
 
-    @Value("${app.docxtemplater.url:http://localhost:3001/render-docx}")
+    @Value("${app.docxtemplater.url:}")
     private String docxtemplaterUrl;
 
     /**
@@ -134,6 +134,8 @@ public class DocxtemplaterService {
         // Cargar imagen de firma y convertir a base64
         String firmaBase64 = cargarFirmaBase64();
         datos.put("firma.jpeg", firmaBase64);
+        datos.put("firma.jpg", firmaBase64);
+        datos.put("firma", firmaBase64);
 
         datos.put("alcalde", safeNombreCompleto(tramite.getUsuarioAlcalde()).toUpperCase());
         datos.put("verificador", safeNombreCompleto(tramite.getUsuarioVerificador()).toUpperCase());

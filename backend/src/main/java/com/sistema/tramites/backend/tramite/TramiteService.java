@@ -47,28 +47,8 @@ public class TramiteService {
         Tramite tramite = tramiteRepository.findById(tramiteId)
             .orElseThrow(() -> new IllegalArgumentException("Trámite no encontrado"));
         try {
-            // Seleccionar plantilla según tipo de trámite
-            String tipo = tramite.getTipoTramite() != null ? tramite.getTipoTramite().trim().toUpperCase() : "";
-            String plantilla;
-            switch (tipo) {
-                case "JUNTA DE ACCION":
-                case "CERTIFICADO_RESIDENCIA":
-                    plantilla = "CARTA RESIDENCIA JUNTA DE ACCION.docx";
-                    break;
-                case "REGISTRADURIA NACIONAL":
-                    plantilla = "CARTA RESIDENCIA REGISTRADURIA NACIONAL.docx";
-                    break;
-                case "SISBEN":
-                case "CERTIFICADO_SISBEN":
-                    plantilla = "CARTA RESIDENCIA SISBEN.docx";
-                    break;
-                case "NEGATIVA":
-                case "CERTIFICADO_NEGATIVO":
-                    plantilla = "RESPUESTA NEGATIVA.docx";
-                    break;
-                default:
-                    throw new RuntimeException("Tipo de trámite desconocido: " + tipo);
-            }
+            // La selección de plantilla se centraliza en DocumentoGeneradoService
+            // para evitar divergencias entre tipoTramite/tipo_certificado.
             java.util.Map<String, String> datos = new java.util.HashMap<>();
             datos.put("consecutivo", tramite.getConsecutivoVerificador() != null ? tramite.getConsecutivoVerificador() : "");
             datos.put("nombreSolicitante", tramite.getNombreSolicitante() != null ? tramite.getNombreSolicitante() : "");
@@ -92,6 +72,7 @@ public class TramiteService {
 
             boolean aprobado = esDecisionAprobada(tramite);
             String observacion = tramite.getObservaciones() != null ? tramite.getObservaciones() : "";
+            String plantilla = documentoGeneradoService.obtenerNombrePlantilla(tramite, aprobado);
             byte[] pdf = documentoGeneradoService.generarPdfDocumento(tramite, aprobado, observacion);
             tramite.setContenidoPdfGenerado(pdf);
             tramite.setNombrePdfGenerado(plantilla.replace(".docx", ".pdf"));

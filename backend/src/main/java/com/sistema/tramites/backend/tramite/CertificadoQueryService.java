@@ -28,6 +28,7 @@ public class CertificadoQueryService {
     private final DriveStorageService driveStorageService;
     private final DocumentoGeneradoService documentoGeneradoService;
     private final DocxtemplaterService docxtemplaterService;
+    private final TramiteService tramiteService;
     private final AuditoriaTramiteService auditoriaTramiteService;
 
     public CertificadoQueryService(TramiteRepository tramiteRepository,
@@ -35,12 +36,14 @@ public class CertificadoQueryService {
                                    DriveStorageService driveStorageService,
                                    DocumentoGeneradoService documentoGeneradoService,
                                    DocxtemplaterService docxtemplaterService,
+                                   TramiteService tramiteService,
                                    AuditoriaTramiteService auditoriaTramiteService) {
         this.tramiteRepository = tramiteRepository;
         this.usuarioRepository = usuarioRepository;
         this.driveStorageService = driveStorageService;
         this.documentoGeneradoService = documentoGeneradoService;
         this.docxtemplaterService = docxtemplaterService;
+        this.tramiteService = tramiteService;
         this.auditoriaTramiteService = auditoriaTramiteService;
     }
 
@@ -135,6 +138,17 @@ public class CertificadoQueryService {
     public DocumentoDescargaDTO descargarDocumentoGenerado(Long id, String accion, String usernameHeader, String adminUsernameHeader) {
         Tramite tramite = tramiteRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Trámite no encontrado"));
         byte[] contenido = tramite.getContenidoPdfGenerado();
+
+        // Si aún no hay PDF en BD/Drive, intentamos generarlo automáticamente para no depender de la acción manual de "regenerar".
+        if (contenido == null || contenido.length == 0) {
+            try {
+                tramiteService.regenerarPdf(id);
+                tramite = tramiteRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Trámite no encontrado"));
+                contenido = tramite.getContenidoPdfGenerado();
+            } catch (Exception e) {
+                throw new IllegalStateException("No existe documento generado para este trámite y no fue posible generarlo automáticamente", e);
+            }
+        }
 
         if ((contenido == null || contenido.length == 0) && driveStorageService.isEnabled()) {
             String driveFileId = extraerDriveFileId(tramite.getRuta_certificado_final());
