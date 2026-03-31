@@ -1,0 +1,8 @@
+FROM gotenberg/gotenberg:8
+
+# Instala las fuentes usadas por las plantillas para evitar cambios de métricas
+# y saltos de línea al convertir DOCX -> PDF con LibreOffice.
+USER root
+COPY backend/src/main/resources/fonts /usr/share/fonts/truetype/custom
+RUN fc-cache -f -v
+USER gotenberg

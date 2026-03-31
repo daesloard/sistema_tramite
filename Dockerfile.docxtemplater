@@ -1,0 +1,17 @@
+# Dockerfile para docxtemplater-service (Node.js)
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copiar solo el archivo del servicio y package.json
+COPY docxtemplater-service.js .
+COPY package.json .
+
+# Instalar dependencias
+RUN npm install
+
+# Exponer puerto
+EXPOSE 3001
+
+# Iniciar servicio
+CMD ["node", "docxtemplater-service.js"]
