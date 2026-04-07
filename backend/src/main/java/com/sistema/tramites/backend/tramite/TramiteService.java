@@ -27,8 +27,11 @@ public class TramiteService {
 
         // Lógica para determinar si el trámite está aprobado
         private boolean esDecisionAprobada(Tramite tramite) {
-            // Ejemplo: si tienes un campo verificacionAprobada
-            return tramite.getVerificacionAprobada() != null && tramite.getVerificacionAprobada();
+            if (tramite == null) return true;
+            // Si no existe decisión explícita, inferir por estado para no forzar plantilla negativa.
+            return tramite.getVerificacionAprobada() != null
+                    ? tramite.getVerificacionAprobada()
+                    : tramite.getEstado() != EstadoTramite.RECHAZADO;
         }
     @org.springframework.beans.factory.annotation.Autowired
     private com.sistema.tramites.backend.documento.DocumentoGeneradoService documentoGeneradoService;
@@ -44,8 +47,21 @@ public class TramiteService {
     }
 
     public void regenerarPdf(Long tramiteId) {
+        generarPdfInterno(tramiteId, true);
+    }
+
+    public void generarPdfSiNoExiste(Long tramiteId) {
+        generarPdfInterno(tramiteId, false);
+    }
+
+    private void generarPdfInterno(Long tramiteId, boolean forzarRegeneracion) {
         Tramite tramite = tramiteRepository.findById(tramiteId)
             .orElseThrow(() -> new IllegalArgumentException("Trámite no encontrado"));
+
+        if (!forzarRegeneracion && tramite.getContenidoPdfGenerado() != null && tramite.getContenidoPdfGenerado().length > 0) {
+            return;
+        }
+
         try {
             // La selección de plantilla se centraliza en DocumentoGeneradoService
             // para evitar divergencias entre tipoTramite/tipo_certificado.
@@ -77,10 +93,10 @@ public class TramiteService {
             tramite.setContenidoPdfGenerado(pdf);
             tramite.setNombrePdfGenerado(plantilla.replace(".docx", ".pdf"));
             tramite.setTipoContenidoPdfGenerado("application/pdf");
-            tramite.setMotorPdfGenerado("Gotenberg");
+            tramite.setMotorPdfGenerado(documentoGeneradoService.getMotorPdfConfigurado());
             tramite.setHashDocumentoGenerado(com.sistema.tramites.backend.util.HashUtils.sha256Hex(pdf));
         } catch (Exception ex) {
-            throw new RuntimeException("Error al generar PDF con Gotenberg", ex);
+            throw new RuntimeException("Error al generar PDF", ex);
         }
         tramiteRepository.save(tramite);
         limpiarNotificacionesPorTramite(tramiteId);

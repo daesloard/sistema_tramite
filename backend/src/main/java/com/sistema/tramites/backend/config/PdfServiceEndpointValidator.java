@@ -26,6 +26,9 @@ public class PdfServiceEndpointValidator {
     @Value("${app.docxtemplater.url:}")
     private String docxtemplaterUrl;
 
+    @Value("${app.docxtemplater.enabled:false}")
+    private boolean docxtemplaterEnabled;
+
     @Value("${app.pdf.allow-localhost-services:false}")
     private boolean allowLocalhostServices;
 
@@ -42,7 +45,9 @@ public class PdfServiceEndpointValidator {
         if (gotenbergEnabled) {
             validateUrl("app.pdf.gotenberg.url", gotenbergUrl);
         }
-        validateUrl("app.docxtemplater.url", docxtemplaterUrl);
+        if (docxtemplaterEnabled) {
+            validateUrl("app.docxtemplater.url", docxtemplaterUrl);
+        }
     }
 
     private void validateUrl(String propertyName, String rawUrl) {

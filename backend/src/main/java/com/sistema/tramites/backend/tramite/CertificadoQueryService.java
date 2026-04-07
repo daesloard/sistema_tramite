@@ -142,7 +142,7 @@ public class CertificadoQueryService {
         // Si aún no hay PDF en BD/Drive, intentamos generarlo automáticamente para no depender de la acción manual de "regenerar".
         if (contenido == null || contenido.length == 0) {
             try {
-                tramiteService.regenerarPdf(id);
+                tramiteService.generarPdfSiNoExiste(id);
                 tramite = tramiteRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Trámite no encontrado"));
                 contenido = tramite.getContenidoPdfGenerado();
             } catch (Exception e) {

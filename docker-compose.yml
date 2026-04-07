@@ -1,33 +1,65 @@
-version: '3.8'
 services:
   backend:
-    build: .
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
       - "8080:8080"
     depends_on:
-      - mysql
-      - gotenberg
-      - docxtemplater
+      mysql:
+        condition: service_healthy
+      gotenberg:
+        condition: service_healthy
+      docxtemplater:
+        condition: service_healthy
     environment:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/tramites_municipales
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=password
       - APP_PDF_GOTENBERG_URL=http://gotenberg:3000/forms/libreoffice/convert
       - APP_DOCXTEMPLATER_URL=http://docxtemplater:3001/render-docx
+      - APP_PDF_GOTENBERG_MAX_ATTEMPTS=6
+      - APP_PDF_GOTENBERG_RETRY_DELAY_MS=1200
+      - APP_DOCXTEMPLATER_MAX_ATTEMPTS=6
+      - APP_DOCXTEMPLATER_RETRY_DELAY_MS=1200
   mysql:
     image: mysql:8.0
+    restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_DATABASE: tramites_municipales
     ports:
       - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
   gotenberg:
-    image: gotenberg/gotenberg:8-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.gotenberg
+    restart: unless-stopped
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
   docxtemplater:
     build:
       context: .
       dockerfile: Dockerfile.docxtemplater
+    restart: unless-stopped
     ports:
       - "3001:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s

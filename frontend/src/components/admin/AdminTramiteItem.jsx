@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react';
-import { regenerarPdf } from '../../services/tramiteService';
+import { generarPdf } from '../../services/tramiteService';
 
 export default function AdminTramiteItem({
     tramite,
@@ -92,9 +92,9 @@ export default function AdminTramiteItem({
                                 {!certificadoGeneradoDisponible && (
                                     <button
                                         style={{ ...styles.btnDocDesc, marginTop: 8 }}
-                                        onClick={() => regenerarPdf(tramite.id)}
+                                        onClick={() => generarPdf(tramite.id)}
                                     >
-                                        🔄 Regenerar PDF
+                                        Generar PDF
                                     </button>
                                 )}
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Almacenamiento certificado final:</span> {almacenamientoCertificadoGenerado}</p>
@@ -159,16 +159,16 @@ export default function AdminTramiteItem({
                                                         setRegenerandoPdf(true);
                                                         setMensajePdf('');
                                                         try {
-                                                            const resp = await regenerarPdf(tramite.id);
-                                                            setMensajePdf(resp.message || 'PDF regenerado correctamente');
+                                                            const resp = await generarPdf(tramite.id);
+                                                            setMensajePdf(resp.message || 'PDF generado correctamente');
                                                         } catch (err) {
-                                                            setMensajePdf(err.message || 'Error al regenerar PDF');
+                                                            setMensajePdf(err.message || 'Error al generar PDF');
                                                         } finally {
                                                             setRegenerandoPdf(false);
                                                         }
                                                     }}
                                                 >
-                                                    {regenerandoPdf ? 'Regenerando...' : '🔄 Regenerar PDF'}
+                                                    {regenerandoPdf ? 'Generando...' : 'Generar PDF'}
                                                 </button>
                                             )}
                                         </div>

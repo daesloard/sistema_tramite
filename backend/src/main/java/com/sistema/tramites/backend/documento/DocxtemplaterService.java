@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sistema.tramites.backend.tramite.Tramite;
 import com.sistema.tramites.backend.usuario.Usuario;
 import com.sistema.tramites.backend.util.NumeroALetrasUtil;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -23,8 +24,20 @@ import java.util.Map;
 @Service
 public class DocxtemplaterService {
 
+    @Autowired
+    private DocxTemplateProcessor docxTemplateProcessor;
+
+    @Value("${app.docxtemplater.enabled:false}")
+    private boolean docxtemplaterEnabled;
+
     @Value("${app.docxtemplater.url:}")
     private String docxtemplaterUrl;
+
+    @Value("${app.docxtemplater.max-attempts:3}")
+    private int docxtemplaterMaxAttempts;
+
+    @Value("${app.docxtemplater.retry-delay-ms:700}")
+    private long docxtemplaterRetryDelayMs;
 
     /**
      * Procesa plantilla DOCX reemplazando marcadores {{nombre}}.
@@ -37,6 +50,11 @@ public class DocxtemplaterService {
      * @throws Exception Si falla el procesamiento
      */
     public byte[] processTemplate(String templateName, Tramite tramite, boolean aprobado, String observacion) throws Exception {
+        Map<String, String> datos = prepararDatos(tramite, aprobado, observacion);
+        if (!docxtemplaterEnabled) {
+            return docxTemplateProcessor.processTemplate(templateName, datos, cargarFirmaBytes());
+        }
+
         // Cargar plantilla DOCX desde classpath
         String resourcePath = "templates/" + templateName;
         java.io.InputStream inputStream = getClass().getClassLoader().getResourceAsStream(resourcePath);
@@ -50,13 +68,14 @@ public class DocxtemplaterService {
         if (inputStream == null) {
             throw new RuntimeException("Plantilla no encontrada: " + resourcePath);
         }
-        
-        byte[] plantillaBytes = inputStream.readAllBytes();
+
+        byte[] plantillaBytes;
+        try (java.io.InputStream is = inputStream) {
+            plantillaBytes = is.readAllBytes();
+        }
         System.out.println("[DOCXTEMPLATER] Plantilla cargada: " + resourcePath + " (" + plantillaBytes.length + " bytes)");
 
         // Preparar datos para marcadores
-        Map<String, String> datos = prepararDatos(tramite, aprobado, observacion);
-        
         // Serializar datos a JSON
         ObjectMapper mapper = new ObjectMapper();
         String jsonData = mapper.writeValueAsString(datos);
@@ -85,21 +104,53 @@ public class DocxtemplaterService {
         bos.write(("--" + boundary + "--" + CRLF).getBytes());
         byte[] multipartBody = bos.toByteArray();
 
-        // Enviar petición HTTP a docxtemplater-service
-        var client = java.net.http.HttpClient.newHttpClient();
-        var request = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(docxtemplaterUrl))
-            .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-            .header("Accept", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-            .POST(java.net.http.HttpRequest.BodyPublishers.ofByteArray(multipartBody))
-            .build();
-        
-        var response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
-        if (response.statusCode() != 200) {
-            throw new RuntimeException("docxtemplater-service error: " + response.statusCode() + " - " + new String(response.body()));
+        // Enviar petición HTTP a docxtemplater-service con reintentos para evitar caídas transitorias.
+        var client = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(java.time.Duration.ofSeconds(15))
+                .build();
+
+        byte[] docxProcesado = null;
+        int attempts = Math.max(1, docxtemplaterMaxAttempts);
+        RuntimeException lastError = null;
+        for (int i = 1; i <= attempts; i++) {
+            try {
+                var request = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create(docxtemplaterUrl))
+                        .timeout(java.time.Duration.ofSeconds(35))
+                        .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                        .header("Accept", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofByteArray(multipartBody))
+                        .build();
+
+                var response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+                if (response.statusCode() == 200) {
+                    docxProcesado = response.body();
+                    break;
+                }
+
+                String errorBody = new String(response.body());
+                lastError = new RuntimeException("docxtemplater-service error: " + response.statusCode() + " - " + errorBody);
+                if (!esErrorReintentable(response.statusCode()) || i == attempts) {
+                    throw lastError;
+                }
+            } catch (java.io.IOException ex) {
+                lastError = new RuntimeException("Error de conexión/timeout con docxtemplater-service: " + ex.getMessage(), ex);
+                if (i == attempts) {
+                    throw lastError;
+                }
+            }
+
+            try {
+                Thread.sleep(Math.max(0L, docxtemplaterRetryDelayMs));
+            } catch (InterruptedException interruptedException) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Reintento de docxtemplater interrumpido", interruptedException);
+            }
         }
-        
-        byte[] docxProcesado = response.body();
+
+        if (docxProcesado == null) {
+            throw (lastError != null) ? lastError : new RuntimeException("docxtemplater-service no devolvió respuesta válida");
+        }
         
         // Validar que el DOCX procesado no esté vacío
         if (docxProcesado == null || docxProcesado.length < 1000) {
@@ -107,6 +158,10 @@ public class DocxtemplaterService {
         }
         
         return docxProcesado;
+    }
+
+    private boolean esErrorReintentable(int statusCode) {
+        return statusCode == 502 || statusCode == 503 || statusCode == 504;
     }
 
     /**
@@ -176,6 +231,23 @@ public class DocxtemplaterService {
             System.out.println("[FIRMA] Error al cargar firma: " + e.getMessage());
             e.printStackTrace();
             return "";
+        }
+    }
+
+    private byte[] cargarFirmaBytes() {
+        try {
+            java.io.InputStream inputStream = getClass().getClassLoader().getResourceAsStream("templates/firma.jpeg");
+            if (inputStream == null) {
+                inputStream = getClass().getResourceAsStream("/templates/firma.jpeg");
+            }
+            if (inputStream == null) {
+                return new byte[0];
+            }
+            try (java.io.InputStream is = inputStream) {
+                return is.readAllBytes();
+            }
+        } catch (Exception ex) {
+            return new byte[0];
         }
     }
 

@@ -9,6 +9,18 @@ export async function regenerarPdf(tramiteId) {
     }
     return response.json();
 }
+
+export async function generarPdf(tramiteId) {
+    const response = await fetch(`${API_URL}/${tramiteId}/generar-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || 'No se pudo generar el PDF');
+    }
+    return response.json();
+}
 import { API_TRAMITES_URL } from '../config/api';
 
 const API_URL = API_TRAMITES_URL;

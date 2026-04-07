@@ -4,5 +4,5 @@ FROM gotenberg/gotenberg:8
 # y saltos de línea al convertir DOCX -> PDF con LibreOffice.
 USER root
 COPY backend/src/main/resources/fonts /usr/share/fonts/truetype/custom
-RUN fc-cache -f -v
+RUN fc-cache -f -v && fc-list | grep -i "Maven Pro" || true
 USER gotenberg

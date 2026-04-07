@@ -1,118 +1,142 @@
 package com.sistema.tramites.backend.documento;
 
-import com.sistema.tramites.backend.tramite.Tramite;
-import com.sistema.tramites.backend.usuario.Usuario;
-import com.sistema.tramites.backend.util.NumeroALetrasUtil;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.apache.poi.xwpf.usermodel.XWPFParagraph;
-import org.apache.poi.xwpf.usermodel.XWPFRun;
-import org.springframework.core.io.ResourceLoader;
+import org.apache.poi.util.Units;
+import org.apache.poi.xwpf.usermodel.*;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @Component
 public class DocxTemplateProcessor {
+
+    private static final String[] SIGNATURE_PLACEHOLDERS = {
+            "{{firma}}",
+            "{{firma.jpg}}",
+            "{{firma.jpeg}}",
+            "<<firma>>",
+            "<<firma.jpg>>",
+            "<<firma.jpeg>>"
+    };
+
     private final ResourceLoader resourceLoader;
 
     public DocxTemplateProcessor(ResourceLoader resourceLoader) {
         this.resourceLoader = resourceLoader;
     }
 
-    public byte[] processTemplate(String templateName, Tramite tramite, boolean aprobado, String observacion) throws IOException {
+    public byte[] processTemplate(String templateName, Map<String, String> replacements, byte[] signatureBytes) throws IOException {
         Resource templateResource = resourceLoader.getResource("classpath:templates/" + templateName);
-        try (XWPFDocument document = new XWPFDocument(templateResource.getInputStream())) {
+        if (!templateResource.exists()) {
+            throw new IOException("Plantilla no encontrada en classpath:templates/" + templateName);
+        }
 
-            Map<String, String> replacements = createReplacements(tramite, aprobado, observacion);
+        try (XWPFDocument document = new XWPFDocument(templateResource.getInputStream());
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
 
-            // Replace in all paragraphs and runs
-            List<XWPFParagraph> paragraphs = document.getParagraphs();
-            for (XWPFParagraph paragraph : paragraphs) {
-                replaceInParagraph(paragraph, replacements);
+            processParagraphs(document.getParagraphs(), replacements, signatureBytes);
+            processTables(document.getTables(), replacements, signatureBytes);
+
+            for (XWPFHeader header : document.getHeaderList()) {
+                processParagraphs(header.getParagraphs(), replacements, signatureBytes);
+                processTables(header.getTables(), replacements, signatureBytes);
             }
 
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            for (XWPFFooter footer : document.getFooterList()) {
+                processParagraphs(footer.getParagraphs(), replacements, signatureBytes);
+                processTables(footer.getTables(), replacements, signatureBytes);
+            }
+
             document.write(baos);
-            baos.close();
             return baos.toByteArray();
         }
     }
 
-    private Map<String, String> createReplacements(Tramite tramite, boolean aprobado, String observacion) {
-        Map<String, String> reps = new HashMap<>();
-        LocalDateTime firmaDate = tramite.getFechaFirmaAlcalde();
-        LocalDate firmaLocalDate = firmaDate != null ? firmaDate.toLocalDate() : LocalDate.now();
-
-        // Solo los marcadores especificados por el usuario:
-        reps.put("consecutivo", safeValue(tramite.getConsecutivoVerificador()));
-        reps.put("nombreSolicitante", safeValue(tramite.getNombreSolicitante()));
-        reps.put("numeroDocumento", safeValue(tramite.getNumeroDocumento()));
-        reps.put("lugarExpedicionDocumento", safeValue(tramite.getLugarExpedicionDocumento()));
-        reps.put("direccionResidencia", safeValue(tramite.getDireccionResidencia()));
-        reps.put("dias", String.valueOf(firmaLocalDate.getDayOfMonth()));
-        reps.put("diasLetras", NumeroALetrasUtil.numeroALetras(firmaLocalDate.getDayOfMonth()));
-        reps.put("mesLetras", NumeroALetrasUtil.mesALetras(firmaLocalDate));
-        reps.put("año", String.valueOf(firmaLocalDate.getYear()));
-        reps.put("añoLetra", NumeroALetrasUtil.anioALetras(firmaLocalDate.getYear()));
-        reps.put("firma.jpeg", ""); // El valor real se inserta en DocumentoGeneradoService
-        reps.put("alcalde", safeNombreCompleto(tramite.getUsuarioAlcalde()));
-        reps.put("verificador", safeNombreCompleto(tramite.getUsuarioVerificador()));
-        reps.put("numeroRadico", safeValue(tramite.getNumeroRadicado()));
-        reps.put("fechaFirma", firmaDate != null ? firmaDate.toString() : "");
-        reps.put("observacion", safeValue(tramite.getObservaciones()));
-        // Si hay otros marcadores definidos por el usuario, agrégalos aquí
-
-        return reps;
-    }
-
-    private void replaceInParagraph(XWPFParagraph paragraph, Map<String, String> replacements) {
-        // Reemplazo robusto de marcadores
-        StringBuilder fullText = new StringBuilder();
-        for (XWPFRun run : paragraph.getRuns()) {
-            String runText = run.getText(0);
-            if (runText != null) {
-                for (Map.Entry<String, String> entry : replacements.entrySet()) {
-                    String marcador = "<<" + entry.getKey() + ">>";
-                    runText = runText.replace(marcador, entry.getValue());
+    private void processTables(List<XWPFTable> tables, Map<String, String> replacements, byte[] signatureBytes) {
+        for (XWPFTable table : tables) {
+            for (XWPFTableRow row : table.getRows()) {
+                for (XWPFTableCell cell : row.getTableCells()) {
+                    processParagraphs(cell.getParagraphs(), replacements, signatureBytes);
+                    processTables(cell.getTables(), replacements, signatureBytes);
                 }
-                fullText.append(runText);
             }
         }
+    }
 
-        // Clear runs and set new text
-        clearRuns(paragraph);
-        if (!fullText.toString().isEmpty()) {
-            XWPFRun newRun = paragraph.createRun();
-            newRun.setText(fullText.toString());
-            // Aplica fuente Maven Pro
-            try {
-                newRun.setFontFamily("Maven Pro");
-            } catch (Exception ignored) {}
+    private void processParagraphs(List<XWPFParagraph> paragraphs, Map<String, String> replacements, byte[] signatureBytes) {
+        for (XWPFParagraph paragraph : paragraphs) {
+            for (XWPFRun run : paragraph.getRuns()) {
+                replaceInRun(run, replacements, signatureBytes);
+            }
         }
     }
 
-    private void clearRuns(XWPFParagraph paragraph) {
-        while (!paragraph.getRuns().isEmpty()) {
-            paragraph.removeRun(0);
+    private void replaceInRun(XWPFRun run, Map<String, String> replacements, byte[] signatureBytes) {
+        String original = run.getText(0);
+        if (original == null || original.isEmpty()) {
+            return;
+        }
+
+        String updated = original;
+        for (Map.Entry<String, String> entry : replacements.entrySet()) {
+            String key = entry.getKey();
+            if (key == null || key.isBlank() || key.toLowerCase().startsWith("firma")) {
+                continue;
+            }
+
+            String value = entry.getValue() == null ? "" : entry.getValue();
+            updated = updated.replace("{{" + key + "}}", value);
+            updated = updated.replace("<<" + key + ">>", value);
+        }
+
+        int signatureOccurrences = countAndStripSignaturePlaceholders(updated);
+        updated = stripSignaturePlaceholders(updated);
+
+        if (!updated.equals(original)) {
+            run.setText(updated, 0);
+        }
+
+        if (signatureOccurrences > 0 && signatureBytes != null && signatureBytes.length > 0) {
+            for (int i = 0; i < signatureOccurrences; i++) {
+                try {
+                    run.addPicture(
+                            new ByteArrayInputStream(signatureBytes),
+                            XWPFDocument.PICTURE_TYPE_JPEG,
+                            "firma.jpeg",
+                            Units.toEMU(170),
+                            Units.toEMU(52)
+                    );
+                } catch (Exception ignored) {
+                    // Si falla la inserción de imagen, se conserva el resto del documento procesado.
+                }
+            }
         }
     }
 
-    private String safeValue(String value) {
-        if (value == null) return "";
-        String v = value.trim();
-        return v.equalsIgnoreCase("null") ? "" : v;
+    private int countAndStripSignaturePlaceholders(String text) {
+        int count = 0;
+        for (String placeholder : SIGNATURE_PLACEHOLDERS) {
+            int from = 0;
+            int idx;
+            while ((idx = text.indexOf(placeholder, from)) >= 0) {
+                count++;
+                from = idx + placeholder.length();
+            }
+        }
+        return count;
     }
 
-    private String safeNombreCompleto(Usuario usuario) {
-        if (usuario == null) return "Verificador/Alcalde";
-        return safeValue(usuario.getNombreCompleto());
+    private String stripSignaturePlaceholders(String text) {
+        String result = text;
+        for (String placeholder : SIGNATURE_PLACEHOLDERS) {
+            result = result.replace(placeholder, "");
+        }
+        return result;
     }
 }
 

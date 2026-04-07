@@ -10,6 +10,10 @@ const upload = multer({ storage: multer.memoryStorage() });
 const enableSignatureImage = process.env.DOCXTEMPLATER_ENABLE_SIGNATURE_IMAGE !== 'false';
 const forceUppercaseValues = process.env.DOCXTEMPLATER_FORCE_UPPERCASE !== 'false';
 
+app.get('/health', (_req, res) => {
+    res.status(200).json({ status: 'ok', service: 'docxtemplater' });
+});
+
 function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
