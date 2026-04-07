@@ -19,10 +19,14 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 @Service
 public class Docx4jPdfConverterService {
@@ -44,7 +48,8 @@ public class Docx4jPdfConverterService {
             throw new IllegalArgumentException("No se puede convertir un DOCX vacío");
         }
 
-        WordprocessingMLPackage wordPackage = WordprocessingMLPackage.load(new ByteArrayInputStream(docxBytes));
+        byte[] normalizedDocxBytes = normalizeDocxForDocx4j(docxBytes);
+        WordprocessingMLPackage wordPackage = WordprocessingMLPackage.load(new ByteArrayInputStream(normalizedDocxBytes));
         if (enforceMavenProFont) {
             applyFontMapper(wordPackage);
         }
@@ -123,5 +128,47 @@ public class Docx4jPdfConverterService {
         } catch (Exception ex) {
             log.warn("No se pudo inicializar configuración FOP explícita: {}", ex.getMessage());
         }
+    }
+
+    private byte[] normalizeDocxForDocx4j(byte[] docxBytes) {
+        try (ByteArrayInputStream input = new ByteArrayInputStream(docxBytes);
+             ZipInputStream zipInput = new ZipInputStream(input);
+             ByteArrayOutputStream output = new ByteArrayOutputStream();
+             ZipOutputStream zipOutput = new ZipOutputStream(output)) {
+
+            boolean modified = false;
+            ZipEntry entry;
+            while ((entry = zipInput.getNextEntry()) != null) {
+                ZipEntry newEntry = new ZipEntry(entry.getName());
+                zipOutput.putNextEntry(newEntry);
+
+                byte[] entryBytes = zipInput.readAllBytes();
+                if (entry.getName().endsWith(".xml")) {
+                    String xml = new String(entryBytes, StandardCharsets.UTF_8);
+                    String normalized = xml
+                            .replace("<w:start", "<w:left")
+                            .replace("</w:start", "</w:left")
+                            .replace("<w:end", "<w:right")
+                            .replace("</w:end", "</w:right");
+                    if (!normalized.equals(xml)) {
+                        modified = true;
+                        entryBytes = normalized.getBytes(StandardCharsets.UTF_8);
+                    }
+                }
+
+                zipOutput.write(entryBytes);
+                zipOutput.closeEntry();
+                zipInput.closeEntry();
+            }
+
+            if (modified) {
+                log.info("DOCX normalizado para docx4j: etiquetas w:start/w:end convertidas a w:left/w:right");
+                return output.toByteArray();
+            }
+        } catch (Exception ex) {
+            log.warn("No se pudo normalizar el DOCX antes de docx4j: {}", ex.getMessage());
+        }
+
+        return docxBytes;
     }
 }

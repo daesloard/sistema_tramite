@@ -25,6 +25,12 @@ public class DocumentoGeneradoService {
     @Value("${app.pdf.gotenberg.retry-delay-ms:800}")
     private long gotenbergRetryDelayMs;
 
+    @Value("${app.pdf.gotenberg.fallback-enabled:false}")
+    private boolean gotenbergFallbackEnabled;
+
+    @Value("${app.pdf.use-docx4j:false}")
+    private boolean docx4jEnabled;
+
     /**
      * Genera PDF a partir de plantilla DOCX con marcadores {{ }}.
      *
@@ -34,12 +40,34 @@ public class DocumentoGeneradoService {
      */
     public byte[] generarPdfDocumento(com.sistema.tramites.backend.tramite.Tramite tramite, boolean aprobado, String observacion) throws Exception {
         String templateName = obtenerNombrePlantilla(tramite, aprobado);
-        byte[] docxProcesado = docxtemplaterService.processTemplate(templateName, tramite, aprobado, observacion);
-        return convertirDocxAGotenberg(docxProcesado);
+        System.out.println("[PDF] Iniciando generacion. Plantilla=" + templateName
+                + " | gotenbergEnabled=" + gotenbergEnabled
+                + " | docx4jEnabled=" + docx4jEnabled
+                + " | gotenbergFallbackEnabled=" + gotenbergFallbackEnabled
+                + " | gotenbergUrl=" + gotenbergUrl);
+        try {
+            byte[] docxProcesado = docxtemplaterService.processTemplate(templateName, tramite, aprobado, observacion);
+            System.out.println("[PDF] DOCX procesado OK (" + docxProcesado.length + " bytes). Convirtiendo a PDF...");
+            byte[] pdf = convertirDocxAPdf(docxProcesado);
+            System.out.println("[PDF] PDF generado OK (" + pdf.length + " bytes).");
+            return pdf;
+        } catch (Exception ex) {
+            System.err.println("[PDF] ERROR al generar PDF: " + ex.getMessage());
+            throw ex;
+        }
     }
 
     public String getMotorPdfConfigurado() {
-        return gotenbergEnabled ? "Gotenberg" : "DOCX4J (interno)";
+        if (gotenbergEnabled && gotenbergFallbackEnabled && docx4jEnabled) {
+            return "Gotenberg (fallback DOCX4J)";
+        }
+        if (gotenbergEnabled) {
+            return "Gotenberg";
+        }
+        if (docx4jEnabled) {
+            return "DOCX4J (interno)";
+        }
+        return "No configurado";
     }
 
     public String obtenerNombrePlantilla(com.sistema.tramites.backend.tramite.Tramite tramite, boolean aprobado) {
@@ -68,16 +96,48 @@ public class DocumentoGeneradoService {
         }
     }
 
+    public byte[] convertirDocxAPdf(byte[] docxBytes) throws Exception {
+        if (docxBytes == null || docxBytes.length == 0) {
+            throw new IllegalArgumentException("No se puede convertir un DOCX vacío");
+        }
+
+        Exception gotenbergException = null;
+
+        if (gotenbergEnabled) {
+            try {
+                return convertirSoloConGotenberg(docxBytes);
+            } catch (Exception ex) {
+                gotenbergException = ex;
+                if (!(gotenbergFallbackEnabled && docx4jEnabled)) {
+                    throw ex;
+                }
+                System.err.println("[PDF] Fallback activado: Gotenberg falló y se intentará DOCX4J. Causa=" + ex.getMessage());
+            }
+        }
+
+        if (docx4jEnabled) {
+            return docx4jPdfConverterService.convert(docxBytes);
+        }
+
+        StringBuilder mensaje = new StringBuilder(
+                "No hay motor PDF habilitado. Configura app.pdf.gotenberg.enabled=true o app.pdf.use-docx4j=true"
+        );
+        if (gotenbergException != null) {
+            mensaje.append(". Error previo de Gotenberg: ").append(gotenbergException.getMessage());
+        }
+        throw new RuntimeException(mensaje.toString());
+    }
+
     public byte[] convertirDocxAGotenberg(byte[] docxBytes) throws Exception {
-        // NOTA IMPORTANTE: docx4j daña el formato de las plantillas (reformatea según FOP).
-        // Gotenberg usa LibreOffice y preserva exactamente el diseño original.
-        // Por eso Gotenberg es obligatorio y no hay fallback a docx4j interno.
+        return convertirDocxAPdf(docxBytes);
+    }
+
+    private byte[] convertirSoloConGotenberg(byte[] docxBytes) throws Exception {
         if (!gotenbergEnabled) {
-            throw new RuntimeException(
-                "Gotenberg está deshabilitado. La conversión DOCX→PDF requiere Gotenberg activo " +
-                "(app.pdf.gotenberg.enabled=true). " +
-                "Sin Gotenberg, los PDFs se dañan. Revisa la configuración o levanta Docker Compose."
-            );
+            throw new RuntimeException("Gotenberg está deshabilitado por configuración");
+        }
+        if (gotenbergUrl == null || gotenbergUrl.isBlank()) {
+            throw new RuntimeException("app.pdf.gotenberg.url está vacío o no configurado");
         }
 
         String boundary = "----tramite-" + java.util.UUID.randomUUID();

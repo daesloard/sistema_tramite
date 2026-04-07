@@ -2,6 +2,7 @@ package com.sistema.tramites.backend.documento;
 
 import org.apache.poi.util.Units;
 import org.apache.poi.xwpf.usermodel.*;
+import org.apache.xmlbeans.XmlCursor;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
@@ -19,10 +20,23 @@ public class DocxTemplateProcessor {
             "{{firma}}",
             "{{firma.jpg}}",
             "{{firma.jpeg}}",
+            "{{FIRMA}}",
+            "{{FIRMA.JPG}}",
+            "{{FIRMA.JPEG}}",
             "<<firma>>",
             "<<firma.jpg>>",
-            "<<firma.jpeg>>"
+            "<<firma.jpeg>>",
+            "((firma))",
+            "((firma.jpg))",
+            "((firma.jpeg))",
+            "((FIRMA))",
+            "((FIRMA.JPG))",
+            "((FIRMA.JPEG))"
     };
+
+        private static final java.util.regex.Pattern SIGNATURE_PATTERN = java.util.regex.Pattern.compile(
+            "(?i)(\\{\\{\\s*firma(?:\\.jpe?g)?\\s*\\}\\}|<<\\s*firma(?:\\.jpe?g)?\\s*>>|\\(\\(\\s*firma(?:\\.jpe?g)?\\s*\\)\\))"
+        );
 
     private final ResourceLoader resourceLoader;
 
@@ -36,7 +50,14 @@ public class DocxTemplateProcessor {
             throw new IOException("Plantilla no encontrada en classpath:templates/" + templateName);
         }
 
-        try (XWPFDocument document = new XWPFDocument(templateResource.getInputStream());
+        try (ByteArrayOutputStream templateBytes = new ByteArrayOutputStream()) {
+            templateResource.getInputStream().transferTo(templateBytes);
+            return processDocument(templateBytes.toByteArray(), replacements, signatureBytes);
+        }
+    }
+
+    public byte[] processDocument(byte[] docxBytes, Map<String, String> replacements, byte[] signatureBytes) throws IOException {
+        try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(docxBytes));
              ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
 
             processParagraphs(document.getParagraphs(), replacements, signatureBytes);
@@ -70,8 +91,70 @@ public class DocxTemplateProcessor {
 
     private void processParagraphs(List<XWPFParagraph> paragraphs, Map<String, String> replacements, byte[] signatureBytes) {
         for (XWPFParagraph paragraph : paragraphs) {
-            for (XWPFRun run : paragraph.getRuns()) {
-                replaceInRun(run, replacements, signatureBytes);
+            replaceInParagraph(paragraph, replacements, signatureBytes);
+        }
+    }
+
+    private void replaceInParagraph(XWPFParagraph paragraph, Map<String, String> replacements, byte[] signatureBytes) {
+        List<XWPFRun> runs = paragraph.getRuns();
+        if (runs == null || runs.isEmpty()) {
+            return;
+        }
+
+        StringBuilder originalBuilder = new StringBuilder();
+        for (XWPFRun run : runs) {
+            String text = run.getText(0);
+            if (text != null) {
+                originalBuilder.append(text);
+            }
+        }
+
+        String original = originalBuilder.toString();
+        if (original.isEmpty()) {
+            return;
+        }
+
+        String updated = original;
+        for (Map.Entry<String, String> entry : replacements.entrySet()) {
+            String key = entry.getKey();
+            if (key == null || key.isBlank() || key.toLowerCase().startsWith("firma")) {
+                continue;
+            }
+
+            String value = entry.getValue() == null ? "" : entry.getValue();
+            updated = updated.replace("{{" + key + "}}", value);
+            updated = updated.replace("<<" + key + ">>", value);
+        }
+
+        int signatureOccurrences = countSignaturePlaceholders(updated);
+        updated = stripSignaturePlaceholders(updated);
+
+        if (!updated.equals(original) || signatureOccurrences > 0) {
+            for (XWPFRun run : runs) {
+                run.setText("", 0);
+            }
+            XWPFRun firstRun = runs.get(0);
+            firstRun.setText(updated, 0);
+
+            if (signatureOccurrences > 0 && signatureBytes != null && signatureBytes.length > 0) {
+                // Evita que la imagen quede recortada cuando la plantilla define interlineado exacto.
+                paragraph.setSpacingLineRule(LineSpacingRule.AUTO);
+                paragraph.setSpacingBetween(1.0);
+                for (int i = 0; i < signatureOccurrences; i++) {
+                    try {
+                        if (!insertSignatureInNewParagraph(paragraph, signatureBytes)) {
+                            firstRun.addPicture(
+                                    new ByteArrayInputStream(signatureBytes),
+                                    XWPFDocument.PICTURE_TYPE_JPEG,
+                                    "firma.jpeg",
+                                    Units.toEMU(170),
+                                    Units.toEMU(52)
+                            );
+                        }
+                    } catch (Exception e) {
+                        // Si falla la inserción en un marcador, se conserva el resto del documento.
+                    }
+                }
             }
         }
     }
@@ -94,7 +177,7 @@ public class DocxTemplateProcessor {
             updated = updated.replace("<<" + key + ">>", value);
         }
 
-        int signatureOccurrences = countAndStripSignaturePlaceholders(updated);
+        int signatureOccurrences = countSignaturePlaceholders(updated);
         updated = stripSignaturePlaceholders(updated);
 
         if (!updated.equals(original)) {
@@ -118,25 +201,63 @@ public class DocxTemplateProcessor {
         }
     }
 
-    private int countAndStripSignaturePlaceholders(String text) {
+    private int countSignaturePlaceholders(String text) {
         int count = 0;
-        for (String placeholder : SIGNATURE_PLACEHOLDERS) {
-            int from = 0;
-            int idx;
-            while ((idx = text.indexOf(placeholder, from)) >= 0) {
-                count++;
-                from = idx + placeholder.length();
-            }
+        java.util.regex.Matcher matcher = SIGNATURE_PATTERN.matcher(text);
+        while (matcher.find()) {
+            count++;
         }
         return count;
     }
 
     private String stripSignaturePlaceholders(String text) {
-        String result = text;
+        String result = SIGNATURE_PATTERN.matcher(text).replaceAll("");
         for (String placeholder : SIGNATURE_PLACEHOLDERS) {
             result = result.replace(placeholder, "");
         }
         return result;
+    }
+
+    private boolean insertSignatureInNewParagraph(XWPFParagraph paragraph, byte[] signatureBytes) {
+        IBody body = paragraph.getBody();
+        XmlCursor cursor = paragraph.getCTP().newCursor();
+        try {
+            cursor.toEndToken();
+
+            XWPFParagraph signatureParagraph = null;
+            if (body instanceof XWPFDocument document) {
+                signatureParagraph = document.insertNewParagraph(cursor);
+            } else if (body instanceof XWPFTableCell cell) {
+                signatureParagraph = cell.insertNewParagraph(cursor);
+            } else if (body instanceof XWPFHeader header) {
+                signatureParagraph = header.insertNewParagraph(cursor);
+            } else if (body instanceof XWPFFooter footer) {
+                signatureParagraph = footer.insertNewParagraph(cursor);
+            }
+
+            if (signatureParagraph == null) {
+                return false;
+            }
+
+            signatureParagraph.setSpacingLineRule(LineSpacingRule.AUTO);
+            signatureParagraph.setSpacingBetween(1.0);
+            signatureParagraph.setAlignment(ParagraphAlignment.LEFT);
+
+            XWPFRun imageRun = signatureParagraph.createRun();
+            imageRun.addPicture(
+                    new ByteArrayInputStream(signatureBytes),
+                    XWPFDocument.PICTURE_TYPE_JPEG,
+                    "firma.jpeg",
+                    Units.toEMU(170),
+                    Units.toEMU(52)
+            );
+
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        } finally {
+            cursor.dispose();
+        }
     }
 }
 

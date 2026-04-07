@@ -8,10 +8,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -50,9 +49,11 @@ public class DocxtemplaterService {
      * @throws Exception Si falla el procesamiento
      */
     public byte[] processTemplate(String templateName, Tramite tramite, boolean aprobado, String observacion) throws Exception {
-        Map<String, String> datos = prepararDatos(tramite, aprobado, observacion);
+        byte[] firmaBytes = cargarFirmaBytes();
+        Map<String, String> datos = prepararDatos(tramite, aprobado, observacion, docxtemplaterEnabled);
         if (!docxtemplaterEnabled) {
-            return docxTemplateProcessor.processTemplate(templateName, datos, cargarFirmaBytes());
+            System.out.println("[DOCXTEMPLATER] Deshabilitado, usando procesador interno.");
+            return docxTemplateProcessor.processTemplate(templateName, datos, firmaBytes);
         }
 
         // Cargar plantilla DOCX desde classpath
@@ -79,7 +80,7 @@ public class DocxtemplaterService {
         // Serializar datos a JSON
         ObjectMapper mapper = new ObjectMapper();
         String jsonData = mapper.writeValueAsString(datos);
-        System.out.println("[DOCXTEMPLATER] JSON enviado: " + jsonData);
+        System.out.println("[DOCXTEMPLATER] JSON enviado: " + mapper.writeValueAsString(resumirDatosLog(datos)));
 
         // Construir multipart/form-data
         String boundary = "----docxtemplater-" + java.util.UUID.randomUUID();
@@ -103,6 +104,8 @@ public class DocxtemplaterService {
         // Cerrar multipart
         bos.write(("--" + boundary + "--" + CRLF).getBytes());
         byte[] multipartBody = bos.toByteArray();
+
+        System.out.println("[DOCXTEMPLATER] Llamando a: " + docxtemplaterUrl);
 
         // Enviar petición HTTP a docxtemplater-service con reintentos para evitar caídas transitorias.
         var client = java.net.http.HttpClient.newBuilder()
@@ -135,6 +138,7 @@ public class DocxtemplaterService {
                 }
             } catch (java.io.IOException ex) {
                 lastError = new RuntimeException("Error de conexión/timeout con docxtemplater-service: " + ex.getMessage(), ex);
+                System.err.println("[DOCXTEMPLATER] Intento " + i + "/" + attempts + " fallido: " + ex.getMessage());
                 if (i == attempts) {
                     throw lastError;
                 }
@@ -157,7 +161,9 @@ public class DocxtemplaterService {
             throw new RuntimeException("docxtemplater-service devolvió un archivo vacío o corrupto.");
         }
         
-        return docxProcesado;
+        // Aplicar un segundo pase en POI para cubrir marcadores remanentes en headers/footers
+        // y garantizar inserción de firma en imagen.
+        return docxTemplateProcessor.processDocument(docxProcesado, datos, firmaBytes);
     }
 
     private boolean esErrorReintentable(int statusCode) {
@@ -168,13 +174,14 @@ public class DocxtemplaterService {
      * Prepara el mapa de datos para reemplazar marcadores.
      * Incluye variantes para compatibilidad con diferentes plantillas.
      */
-    private Map<String, String> prepararDatos(Tramite tramite, boolean aprobado, String observacion) throws Exception {
+    private Map<String, String> prepararDatos(Tramite tramite, boolean aprobado, String observacion, boolean preservarMarcadoresFirma) throws Exception {
         Map<String, String> datos = new HashMap<>();
         LocalDateTime firmaDate = tramite.getFechaFirmaAlcalde();
         LocalDate firmaLocalDate = firmaDate != null ? firmaDate.toLocalDate() : LocalDate.now();
 
         // Datos básicos para todas las plantillas (todos en MAYÚSCULAS)
-        datos.put("consecutivo", safeValue(tramite.getConsecutivoVerificador()).toUpperCase());
+        String consecutivo = safeValue(tramite.getConsecutivoVerificador());
+        datos.put("consecutivo", consecutivo.toUpperCase());
         datos.put("nombreSolicitante", safeValue(tramite.getNombreSolicitante()).toUpperCase());
         datos.put("nombre_colicitante", safeValue(tramite.getNombreSolicitante()).toUpperCase()); // Para RESPUESTA NEGATIVA
         datos.put("numeroDocumento", safeValue(tramite.getNumeroDocumento()).toUpperCase());
@@ -187,13 +194,27 @@ public class DocxtemplaterService {
         datos.put("añoLetra", NumeroALetrasUtil.anioALetras(firmaLocalDate.getYear()).toUpperCase());
 
         // Cargar imagen de firma y convertir a base64
-        String firmaBase64 = cargarFirmaBase64();
-        datos.put("firma.jpeg", firmaBase64);
-        datos.put("firma.jpg", firmaBase64);
-        datos.put("firma", firmaBase64);
+        if (preservarMarcadoresFirma) {
+            datos.put("firma.jpeg", "{{firma.jpeg}}");
+            datos.put("firma.jpg", "{{firma.jpg}}");
+            datos.put("firma", "{{firma}}");
+        } else {
+            String firmaBase64 = cargarFirmaBase64();
+            datos.put("firma.jpeg", firmaBase64);
+            datos.put("firma.jpg", firmaBase64);
+            datos.put("firma", firmaBase64);
+        }
 
-        datos.put("alcalde", safeNombreCompleto(tramite.getUsuarioAlcalde()).toUpperCase());
-        datos.put("verificador", safeNombreCompleto(tramite.getUsuarioVerificador()).toUpperCase());
+        String alcalde = safeNombreCompleto(tramite.getUsuarioAlcalde());
+        String verificador = safeNombreCompleto(tramite.getUsuarioVerificador());
+        if (alcalde.isBlank()) {
+            alcalde = "ALCALDE MUNICIPAL";
+        }
+        if (verificador.isBlank()) {
+            verificador = "VERIFICADOR";
+        }
+        datos.put("alcalde", alcalde.toUpperCase());
+        datos.put("verificador", verificador.toUpperCase());
         datos.put("numeroRadico", safeValue(tramite.getNumeroRadicado()).toUpperCase());
         datos.put("numeroRadicado", safeValue(tramite.getNumeroRadicado()).toUpperCase()); // Variante sin 'o' final
         datos.put("fechaFirma", firmaDate != null ? firmaDate.toString() : "");
@@ -249,6 +270,35 @@ public class DocxtemplaterService {
         } catch (Exception ex) {
             return new byte[0];
         }
+    }
+
+    private Map<String, Object> resumirDatosLog(Map<String, String> datos) {
+        Map<String, Object> resumen = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : datos.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            if (key == null) {
+                continue;
+            }
+
+            if (key.toLowerCase().startsWith("firma")) {
+                if (value == null || value.isBlank()) {
+                    resumen.put(key, "");
+                } else if (value.startsWith("{{") && value.endsWith("}}")) {
+                    resumen.put(key, value);
+                } else {
+                    resumen.put(key, "<base64:" + value.length() + " chars>");
+                }
+                continue;
+            }
+
+            if (value != null && value.length() > 180) {
+                resumen.put(key, value.substring(0, 180) + "...");
+            } else {
+                resumen.put(key, value);
+            }
+        }
+        return resumen;
     }
 
     private String safeValue(String value) {

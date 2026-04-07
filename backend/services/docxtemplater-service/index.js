@@ -9,6 +9,26 @@ const upload = multer();
 
 app.use(express.json());
 
+function summarizeDataForLog(data) {
+  return Object.fromEntries(Object.entries(data || {}).map(([key, value]) => {
+    if (/^firma(\.jpe?g)?$/i.test(key)) {
+      if (typeof value !== 'string' || value.length === 0) {
+        return [key, value || ''];
+      }
+      if (value.startsWith('{{') && value.endsWith('}}')) {
+        return [key, value];
+      }
+      return [key, `<base64:${value.length} chars>`];
+    }
+
+    if (typeof value === 'string' && value.length > 180) {
+      return [key, `${value.slice(0, 180)}...`];
+    }
+
+    return [key, value];
+  }));
+}
+
 // Endpoint para procesar plantilla DOCX
 app.post('/render-docx', upload.any(), (req, res) => {
   try {
@@ -18,7 +38,7 @@ app.post('/render-docx', upload.any(), (req, res) => {
     }
     const templateBuffer = file.buffer;
     const data = JSON.parse(req.body.data);
-    console.log('Datos recibidos:', data);
+    console.log('Datos recibidos:', summarizeDataForLog(data));
     const zip = new PizZip(templateBuffer);
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
