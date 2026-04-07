@@ -25,6 +25,9 @@ public class DocumentoGeneradoService {
     @Value("${app.pdf.gotenberg.retry-delay-ms:800}")
     private long gotenbergRetryDelayMs;
 
+    @Value("${app.pdf.gotenberg.max-delay-ms:10000}")
+    private long gotenbergMaxDelayMs;
+
     @Value("${app.pdf.gotenberg.fallback-enabled:false}")
     private boolean gotenbergFallbackEnabled;
 
@@ -174,23 +177,29 @@ public class DocumentoGeneradoService {
                     return response.body();
                 }
 
+                int statusCode = response.statusCode();
                 String errorBody = new String(response.body());
-                lastError = new RuntimeException("Gotenberg error: " + response.statusCode() + " - " + errorBody);
-                if (!esErrorReintentable(response.statusCode()) || i == attempts) {
+                lastError = new RuntimeException("Gotenberg error: " + statusCode + " - " + errorBody);
+                if (!esErrorReintentable(statusCode) || i == attempts) {
                     throw lastError;
                 }
+
+                String retryAfterHeader = response.headers().firstValue("Retry-After").orElse(null);
+                long waitMs = calcularEsperaReintentoMs(i, statusCode, retryAfterHeader);
+                System.err.println("[PDF] Gotenberg intento " + i + "/" + attempts
+                        + " falló con status=" + statusCode
+                        + ". Reintentando en " + waitMs + " ms");
+                dormirReintento(waitMs);
             } catch (java.io.IOException ex) {
                 lastError = new RuntimeException("Error de conexión/timeout con Gotenberg: " + ex.getMessage(), ex);
                 if (i == attempts) {
                     throw lastError;
                 }
-            }
 
-            try {
-                Thread.sleep(Math.max(0L, gotenbergRetryDelayMs));
-            } catch (InterruptedException interruptedException) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException("Reintento de Gotenberg interrumpido", interruptedException);
+                long waitMs = calcularEsperaReintentoMs(i, 0, null);
+                System.err.println("[PDF] Gotenberg intento " + i + "/" + attempts
+                        + " falló por IO/timeout. Reintentando en " + waitMs + " ms");
+                dormirReintento(waitMs);
             }
         }
 
@@ -207,7 +216,43 @@ public class DocumentoGeneradoService {
     }
 
     private boolean esErrorReintentable(int statusCode) {
-        return statusCode == 502 || statusCode == 503 || statusCode == 504;
+        return statusCode == 429 || statusCode == 502 || statusCode == 503 || statusCode == 504;
+    }
+
+    private long calcularEsperaReintentoMs(int intentoActual, int statusCode, String retryAfterHeader) {
+        long retryAfterMs = parseRetryAfterMs(retryAfterHeader);
+        if (statusCode == 429 && retryAfterMs > 0) {
+            return retryAfterMs;
+        }
+
+        long baseDelay = Math.max(0L, gotenbergRetryDelayMs);
+        long maxDelay = Math.max(baseDelay, gotenbergMaxDelayMs);
+        long factorExponencial = 1L << Math.max(0, intentoActual - 1);
+        long exponencial = baseDelay * factorExponencial;
+        long capped = Math.min(exponencial, maxDelay);
+        long jitter = (long) (Math.random() * Math.max(250L, baseDelay / 2));
+        return Math.min(maxDelay, capped + jitter);
+    }
+
+    private long parseRetryAfterMs(String retryAfterHeader) {
+        if (retryAfterHeader == null || retryAfterHeader.isBlank()) {
+            return -1L;
+        }
+        try {
+            long seconds = Long.parseLong(retryAfterHeader.trim());
+            return Math.max(0L, seconds * 1000L);
+        } catch (NumberFormatException ex) {
+            return -1L;
+        }
+    }
+
+    private void dormirReintento(long waitMs) {
+        try {
+            Thread.sleep(Math.max(0L, waitMs));
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Reintento de Gotenberg interrumpido", interruptedException);
+        }
     }
 
     public org.springframework.core.io.ResourceLoader getResourceLoader() {
