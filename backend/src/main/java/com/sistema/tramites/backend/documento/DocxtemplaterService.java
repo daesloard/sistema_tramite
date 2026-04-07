@@ -38,6 +38,9 @@ public class DocxtemplaterService {
     @Value("${app.docxtemplater.retry-delay-ms:700}")
     private long docxtemplaterRetryDelayMs;
 
+    @Value("${app.docxtemplater.fallback-enabled:true}")
+    private boolean docxtemplaterFallbackEnabled;
+
     /**
      * Procesa plantilla DOCX reemplazando marcadores {{nombre}}.
      *
@@ -55,6 +58,19 @@ public class DocxtemplaterService {
             System.out.println("[DOCXTEMPLATER] Deshabilitado, usando procesador interno.");
             return docxTemplateProcessor.processTemplate(templateName, datos, firmaBytes);
         }
+
+        try {
+            return processTemplateWithDocxtemplater(templateName, datos, firmaBytes);
+        } catch (Exception ex) {
+            if (docxtemplaterFallbackEnabled) {
+                System.err.println("[DOCXTEMPLATER] Fallo del servicio externo, activando fallback interno: " + ex.getMessage());
+                return docxTemplateProcessor.processTemplate(templateName, datos, firmaBytes);
+            }
+            throw ex;
+        }
+    }
+
+    private byte[] processTemplateWithDocxtemplater(String templateName, Map<String, String> datos, byte[] firmaBytes) throws Exception {
 
         // Cargar plantilla DOCX desde classpath
         String resourcePath = "templates/" + templateName;
