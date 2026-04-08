@@ -222,7 +222,9 @@ public class DocumentoGeneradoService {
                 int statusCode = response.statusCode();
                 String errorBody = new String(response.body());
                 lastError = new RuntimeException("Gotenberg error: " + statusCode + " - " + errorBody);
-                if (!esErrorReintentable(statusCode) || i == attempts) {
+                // Si hay fallback disponible y es un 429, no reintentamos: fallamos rápido para ceder a DOCX4J
+                boolean tieneFallback = gotenbergFallbackEnabled && docx4jEnabled;
+                if (!esErrorReintentable(statusCode) || i == attempts || (statusCode == 429 && tieneFallback)) {
                     throw lastError;
                 }
 
