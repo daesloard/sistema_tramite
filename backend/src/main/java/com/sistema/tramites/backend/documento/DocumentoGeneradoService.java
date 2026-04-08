@@ -4,6 +4,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PostConstruct;
+
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+
 @Service
 public class DocumentoGeneradoService {
 
@@ -28,11 +33,25 @@ public class DocumentoGeneradoService {
     @Value("${app.pdf.gotenberg.max-delay-ms:10000}")
     private long gotenbergMaxDelayMs;
 
+    @Value("${app.pdf.gotenberg.max-concurrent:1}")
+    private int gotenbergMaxConcurrent;
+
+    @Value("${app.pdf.gotenberg.queue-timeout-seconds:30}")
+    private long gotenbergQueueTimeoutSeconds;
+
+    private Semaphore gotenbergSemaphore;
+
     @Value("${app.pdf.gotenberg.fallback-enabled:false}")
     private boolean gotenbergFallbackEnabled;
 
     @Value("${app.pdf.use-docx4j:false}")
     private boolean docx4jEnabled;
+
+    @PostConstruct
+    public void inicializarControlConcurrenciaGotenberg() {
+        int maxConcurrent = Math.max(1, gotenbergMaxConcurrent);
+        this.gotenbergSemaphore = new Semaphore(maxConcurrent, true);
+    }
 
     /**
      * Genera PDF a partir de plantilla DOCX con marcadores {{ }}.
@@ -142,6 +161,29 @@ public class DocumentoGeneradoService {
         if (gotenbergUrl == null || gotenbergUrl.isBlank()) {
             throw new RuntimeException("app.pdf.gotenberg.url está vacío o no configurado");
         }
+
+        boolean permitAcquired = false;
+        try {
+            permitAcquired = gotenbergSemaphore.tryAcquire(
+                    Math.max(1L, gotenbergQueueTimeoutSeconds),
+                    TimeUnit.SECONDS
+            );
+            if (!permitAcquired) {
+                throw new RuntimeException("Cola de conversión PDF saturada. Intente nuevamente en unos segundos");
+            }
+
+            return convertirSoloConGotenbergInterno(docxBytes);
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrumpido esperando turno de conversión PDF", interruptedException);
+        } finally {
+            if (permitAcquired) {
+                gotenbergSemaphore.release();
+            }
+        }
+    }
+
+    private byte[] convertirSoloConGotenbergInterno(byte[] docxBytes) throws Exception {
 
         String boundary = "----tramite-" + java.util.UUID.randomUUID();
         String crlf = "\r\n";
