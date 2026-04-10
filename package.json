@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "deploy:backend": "docker compose up -d --build",
+    "tunnel:start": "cloudflared tunnel --url http://localhost:9090",
+    "deploy:with-tunnel": "npm run deploy:backend && npm run tunnel:start"
+  },
   "dependencies": {
     "docxtemplater": "^3.68.3",
     "docxtemplater-image-module-free": "^1.1.1",
