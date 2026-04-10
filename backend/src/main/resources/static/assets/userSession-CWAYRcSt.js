@@ -1,1 +1,0 @@
-const t=()=>{try{const e=localStorage.getItem("user");return e?JSON.parse(e):null}catch{return null}},n=()=>{const r=t()?.username;return typeof r=="string"?r.trim():""},s=(e="X-Username")=>{const r=n();return r?{[e]:r}:{}};export{s as b,t as g};
