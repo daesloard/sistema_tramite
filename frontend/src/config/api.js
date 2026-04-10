@@ -2,7 +2,7 @@ const hostActual = typeof window !== 'undefined' ? window.location.hostname : 'l
 const esDeployPages = hostActual.endsWith('pages.dev');
 const origenPorDefecto = esDeployPages
 	? 'https://sistema-tramite.onrender.com'
-	: `http://${hostActual}:8080`;
+	: `http://${hostActual}:9090`;
 
 export const API_ORIGIN = (import.meta.env.VITE_API_ORIGIN || origenPorDefecto)
 	.trim()
