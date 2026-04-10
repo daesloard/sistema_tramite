@@ -219,9 +219,12 @@ public class FileUploadServiceImpl implements FileUploadService {
                 tramite.getEstado(), tramite.getEstado()
             );
 
+                boolean verInline = "ver".equals(accionNormalizada) || "visualizar".equals(accionNormalizada) || "open".equals(accionNormalizada);
+                String disposition = (verInline ? "inline" : "attachment") + "; filename=\"" + nombreArchivo + "\"";
+
             return ResponseEntity.ok()
                     .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, contentType)
-                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nombreArchivo + "\"")
+                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, disposition)
                     .body(contenido);
 
         } catch (Exception e) {

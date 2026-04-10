@@ -4,6 +4,7 @@ package com.sistema.tramites.backend.controladores;
 
 import com.sistema.tramites.backend.tramite.*;
 import com.sistema.tramites.backend.tramite.dto.*;
+import com.sistema.tramites.backend.util.InputSecurityUtils;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -179,12 +180,15 @@ public class TramiteController {
     public ResponseEntity<?> descargarDocumentoGenerado(@PathVariable Long id, @RequestParam(value = "accion", required = false) String accion, @RequestHeader(value = "X-Username", required = false) String usernameHeader, @RequestHeader(value = "X-Admin-Username", required = false) String adminUsernameHeader) {
         try {
             DocumentoDescargaDTO dto = certificadoQueryService.descargarDocumentoGenerado(id, accion, usernameHeader, adminUsernameHeader);
+            String accionNormalizada = InputSecurityUtils.normalizeDocumentAction(accion);
+            boolean verInline = "ver".equals(accionNormalizada) || "visualizar".equals(accionNormalizada) || "open".equals(accionNormalizada);
+            String disposition = (verInline ? "inline" : "attachment") + "; filename=\"" + dto.getNombreArchivo() + "\"";
             return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + dto.getNombreArchivo() + "\"")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
                     .header(HttpHeaders.CONTENT_TYPE, "application/pdf")
                     .body(dto.getContenido());
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
         } catch (Exception e) {
