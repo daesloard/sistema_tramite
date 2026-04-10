@@ -6,6 +6,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import com.sistema.tramites.backend.util.InputSecurityUtils;
 
 import java.util.List;
 
@@ -39,7 +40,7 @@ public class UsuarioEmailSchemaMigration {
             );
 
             for (String indexName : uniqueEmailIndexes) {
-                String safeIndexName = indexName.replace("`", "");
+                String safeIndexName = InputSecurityUtils.sanitizeSqlIdentifier(indexName, "INDEX_NAME");
                 jdbcTemplate.execute("ALTER TABLE usuarios DROP INDEX `" + safeIndexName + "`");
                 logger.info("✅ Índice único removido de usuarios.email: {}", safeIndexName);
             }

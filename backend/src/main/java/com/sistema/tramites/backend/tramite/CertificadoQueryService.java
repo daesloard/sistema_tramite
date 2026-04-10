@@ -11,6 +11,7 @@ import com.sistema.tramites.backend.usuario.RolUsuario;
 import com.sistema.tramites.backend.usuario.Usuario;
 import com.sistema.tramites.backend.usuario.UsuarioRepository;
 import com.sistema.tramites.backend.util.HashUtils;
+import com.sistema.tramites.backend.util.InputSecurityUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,12 +50,9 @@ public class CertificadoQueryService {
 
 @Transactional(readOnly = true)
     public Map<String, Object> verificarCertificado(String numeroRadicado, String factorTipo, String factorValor) {
-        String criterio = numeroRadicado == null ? "" : numeroRadicado.trim();
-        if (criterio.isBlank()) throw new IllegalArgumentException("Radicado o hash requerido");
-
-        String tipo = factorTipo == null ? "" : factorTipo.trim().toUpperCase(Locale.ROOT);
-        String valor = factorValor == null ? "" : factorValor.trim();
-        if (tipo.isBlank() || valor.isBlank()) throw new IllegalArgumentException("Debes enviar el factor de validación (tipo y valor)");
+        String criterio = InputSecurityUtils.validateRadicadoOrHash(numeroRadicado);
+        String tipo = InputSecurityUtils.normalizeFactorType(factorTipo);
+        String valor = InputSecurityUtils.validateFactorValue(factorValor, 120);
 
         Optional<Tramite> optTramite = tramiteRepository.findByNumeroRadicadoIgnoreCase(criterio);
         if (optTramite.isEmpty()) optTramite = tramiteRepository.findByHashDocumentoGeneradoIgnoreCase(criterio);
@@ -112,7 +110,7 @@ public class CertificadoQueryService {
     public List<Map<String, Object>> consultarSolicitudesResueltas(String numeroDocumento) {
         String documento = numeroDocumento == null ? "" : numeroDocumento.trim();
         if (documento.isBlank()) throw new IllegalArgumentException("Número de documento requerido");
-        if (!documento.matches("\\d+")) throw new IllegalArgumentException("El numero de documento solo debe contener digitos");
+        if (!documento.matches("\\d{5,20}")) throw new IllegalArgumentException("El numero de documento debe contener entre 5 y 20 digitos");
 
         return tramiteRepository.findAll().stream()
                 .filter(t -> t.getNumeroDocumento() != null && documento.equalsIgnoreCase(t.getNumeroDocumento().trim()))
@@ -137,6 +135,7 @@ public class CertificadoQueryService {
     @Transactional
     public DocumentoDescargaDTO descargarDocumentoGenerado(Long id, String accion, String usernameHeader, String adminUsernameHeader) {
         Tramite tramite = tramiteRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Trámite no encontrado"));
+        String accionNormalizada = InputSecurityUtils.normalizeDocumentAction(accion);
         byte[] contenido = tramite.getContenidoPdfGenerado();
 
         // Si aún no hay PDF en BD/Drive, intentamos generarlo automáticamente para no depender de la acción manual de "regenerar".
@@ -166,7 +165,7 @@ public class CertificadoQueryService {
         }
 
         Long usuarioId = resolverUsuarioIdPorHeaders(usernameHeader, adminUsernameHeader);
-        String accionAuditoria = resolverAccionDocumentoGenerado(accion);
+        String accionAuditoria = resolverAccionDocumentoGenerado(accionNormalizada);
         String almacenamiento = extraerDriveFileId(tramite.getRuta_certificado_final()) != null ? "DRIVE" : "BD";
         auditoriaTramiteService.registrarEvento(
                 tramite.getId(), usuarioId, accionAuditoria,
@@ -312,7 +311,7 @@ public class CertificadoQueryService {
     }
 
     private String resolverAccionDocumentoGenerado(String accion) {
-        String a = accion == null ? "" : accion.trim().toLowerCase(Locale.ROOT);
+        String a = InputSecurityUtils.normalizeDocumentAction(accion);
         if (a.equals("ver") || a.equals("visualizar") || a.equals("open")) return "CERTIFICADO_GENERADO_VISUALIZADO";
         if (a.equals("descargar") || a.equals("download")) return "CERTIFICADO_GENERADO_DESCARGADO";
         return "CERTIFICADO_GENERADO_ACCESO";

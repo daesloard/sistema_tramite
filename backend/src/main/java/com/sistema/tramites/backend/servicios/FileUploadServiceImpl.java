@@ -22,6 +22,7 @@ import com.sistema.tramites.backend.tramite.TramiteRepository;
 import com.sistema.tramites.backend.usuario.Usuario;
 import com.sistema.tramites.backend.usuario.RolUsuario;
 import com.sistema.tramites.backend.usuario.UsuarioRepository;
+import com.sistema.tramites.backend.util.InputSecurityUtils;
 import com.sistema.tramites.backend.util.EmailService;
 import com.sistema.tramites.backend.controladores.FileUploadController.VerificacionDocumentosDTO;
 import com.sistema.tramites.backend.controladores.FileUploadController.DocumentoStatusDTO;
@@ -44,6 +45,7 @@ public class FileUploadServiceImpl implements FileUploadService {
     @Override
     public ResponseEntity<?> uploadDocumento(Long id, MultipartFile file, String tipo) {
         try {
+            String tipoNormalizado = InputSecurityUtils.normalizeDocumentType(tipo);
             // Validar que el archivo no esté vacío
             if (file.isEmpty()) {
                 return ResponseEntity.badRequest().body("❌ El archivo está vacío");
@@ -84,7 +86,7 @@ public class FileUploadServiceImpl implements FileUploadService {
                 }
             }
 
-            switch (tipo.toLowerCase(Locale.ROOT)) {
+            switch (tipoNormalizado) {
                 case "sisben":
                     tramite.setContenidoCertificadoSisben(driveId != null ? null : contenido);
                     tramite.setNombreArchivoSisben(file.getOriginalFilename());
@@ -121,20 +123,20 @@ public class FileUploadServiceImpl implements FileUploadService {
 
             Tramite actualizado = tramiteRepository.save(tramite);
 
-            String accion = "DOCUMENTO_CARGADO_" + tipo.toUpperCase(Locale.ROOT);
+            String accion = "DOCUMENTO_CARGADO_" + tipoNormalizado.toUpperCase(Locale.ROOT);
             String almacenamiento = driveId != null ? "DRIVE" : "BD";
             auditoriaTramiteService.registrarEvento(
                 actualizado.getId(),
                 null,
                 accion,
-                "Carga de " + tipo + " en " + almacenamiento + " para radicado " + actualizado.getNumeroRadicado(),
+                "Carga de " + tipoNormalizado + " en " + almacenamiento + " para radicado " + actualizado.getNumeroRadicado(),
                 actualizado.getEstado(),
                 actualizado.getEstado()
             );
 
             return ResponseEntity.ok(new UploadResponseDTO(
                     true,
-                    "✅ Archivo " + tipo + " cargado exitosamente",
+                    "✅ Archivo " + tipoNormalizado + " cargado exitosamente",
                     actualizado.getId(),
                     driveId != null ? "DRIVE" : "BD",
                     actualizado.getDriveFolderId(),
@@ -153,6 +155,8 @@ public class FileUploadServiceImpl implements FileUploadService {
     @Override
     public ResponseEntity<?> descargarDocumento(Long id, String tipo, String accion, String usernameHeader, String adminUsernameHeader) {
         try {
+            String tipoNormalizado = InputSecurityUtils.normalizeDocumentType(tipo);
+            String accionNormalizada = InputSecurityUtils.normalizeDocumentAction(accion);
             Optional<Tramite> tramiteOpt = tramiteRepository.findById(id);
             if (tramiteOpt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body("❌ Trámite no encontrado");
@@ -164,7 +168,7 @@ public class FileUploadServiceImpl implements FileUploadService {
             String contentType = null;
             String ruta = null;
 
-            switch (tipo.toLowerCase(Locale.ROOT)) {
+            switch (tipoNormalizado) {
                 case "sisben":
                     contenido = tramite.getContenidoCertificadoSisben();
                     nombreArchivo = tramite.getNombreArchivoSisben();
@@ -208,10 +212,10 @@ public class FileUploadServiceImpl implements FileUploadService {
             }
 
             Long usuarioId = resolverUsuarioIdPorHeaders(usernameHeader, adminUsernameHeader);
-            String accionAuditoria = resolverAccionDocumento("DOCUMENTO", tipo.toUpperCase(), accion);
+            String accionAuditoria = resolverAccionDocumento("DOCUMENTO", tipoNormalizado.toUpperCase(Locale.ROOT), accionNormalizada);
             auditoriaTramiteService.registrarEvento(
                 tramite.getId(), usuarioId, accionAuditoria,
-                "Acceso a " + tipo + " para radicado " + tramite.getNumeroRadicado(),
+                "Acceso a " + tipoNormalizado + " para radicado " + tramite.getNumeroRadicado(),
                 tramite.getEstado(), tramite.getEstado()
             );
 
@@ -418,9 +422,9 @@ public class FileUploadServiceImpl implements FileUploadService {
     }
 
     private String resolverAccionDocumento(String prefijo, String tipo, String accion) {
-        String a = accion == null ? "" : accion.trim().toLowerCase();
-        if (a.contains("ver") || a.contains("visualizar")) return prefijo + "_VISUALIZADO_" + tipo;
-        if (a.contains("descargar")) return prefijo + "_DESCARGADO_" + tipo;
+        String a = InputSecurityUtils.normalizeDocumentAction(accion);
+        if (a.equals("ver") || a.equals("visualizar") || a.equals("open")) return prefijo + "_VISUALIZADO_" + tipo;
+        if (a.equals("descargar") || a.equals("download")) return prefijo + "_DESCARGADO_" + tipo;
         return prefijo + "_ACCESO_" + tipo;
     }
 }

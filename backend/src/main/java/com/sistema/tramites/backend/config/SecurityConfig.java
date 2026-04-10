@@ -21,16 +21,16 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
-            .headers(headers -> headers
-                .contentTypeOptions(contentType -> {})
-                .frameOptions(frameOptions -> frameOptions.deny())
-                .referrerPolicy(referrer -> referrer.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
-                .permissionsPolicy(permissions -> permissions.policy("camera=(), microphone=(), geolocation=()"))
-                .httpStrictTransportSecurity(hsts -> hsts
+            .headers(headers -> {
+                headers.contentTypeOptions(contentType -> {});
+                headers.frameOptions(frameOptions -> frameOptions.deny());
+                headers.referrerPolicy(referrer -> referrer.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN));
+                headers.permissionsPolicy(permissions -> permissions.policy("camera=(), microphone=(), geolocation=()"));
+                headers.httpStrictTransportSecurity(hsts -> hsts
                     .includeSubDomains(true)
                     .maxAgeInSeconds(31536000)
-                )
-                .contentSecurityPolicy(csp -> csp.policyDirectives(
+                );
+                headers.contentSecurityPolicy(csp -> csp.policyDirectives(
                     "default-src 'self'; "
                         + "base-uri 'self'; "
                         + "frame-ancestors 'none'; "
@@ -39,8 +39,8 @@ public class SecurityConfig {
                         + "style-src 'self' 'unsafe-inline' https:; "
                         + "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; "
                         + "connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://192.168.*:* http://10.*:* http://172.*:*"
-                ))
-            )
+                ));
+            })
             .authorizeHttpRequests(auth -> auth
                 .anyRequest().permitAll()
             );
