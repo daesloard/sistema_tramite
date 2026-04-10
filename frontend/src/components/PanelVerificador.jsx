@@ -150,12 +150,22 @@ const handleAprobar = async () => {
     const handleConsolidado = async () => {
         setCargandoConsolidado(true);
         try {
-            const response = await fetch(`${API_TRAMITES_URL}/export/pdf`, {
+            const response = await fetch(`${API_TRAMITES_URL}/reporte/consolidado-verificaciones`, {
                 headers: { 'X-Username': usuarioActual.username },
             });
-            if (!response.ok) throw new Error('Error al generar consolidado');
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || 'Error al generar consolidado');
+            }
             const blob = await response.blob();
-            window.open(URL.createObjectURL(blob), '_blank');
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'consolidado_verificaciones.xlsx';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
         } catch (err) {
             mostrarAviso('error', err.message);
         } finally {

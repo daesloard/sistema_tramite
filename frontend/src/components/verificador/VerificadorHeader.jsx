@@ -24,7 +24,7 @@ export default function VerificadorHeader({
                 onClick={handleConsolidado}
                 disabled={cargandoConsolidado}
             >
-                {cargandoConsolidado ? '⏳ Consolidando...' : '📊 Ver PDF Consolidado de Solicitudes'}
+                {cargandoConsolidado ? '⏳ Generando Excel...' : '📊 Descargar Excel Consolidado'}
             </button>
         </div>
     );
