@@ -5,16 +5,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Normalize-EnvValue {
+    param([string]$Value)
+    if ($null -eq $Value) { return "" }
+    return $Value.Replace("`r", "").Replace("`n", "").Trim()
+}
+
 function Update-CloudflarePagesApiOrigin {
     param(
         [Parameter(Mandatory = $true)]
         [string]$ApiOrigin
     )
 
-    $token = $env:CLOUDFLARE_API_TOKEN
-    $accountId = $env:CLOUDFLARE_ACCOUNT_ID
-    $projectName = $env:CLOUDFLARE_PAGES_PROJECT
-    $deployHookUrl = $env:CLOUDFLARE_PAGES_DEPLOY_HOOK_URL
+    $token = Normalize-EnvValue $env:CLOUDFLARE_API_TOKEN
+    $accountId = Normalize-EnvValue $env:CLOUDFLARE_ACCOUNT_ID
+    $projectName = Normalize-EnvValue $env:CLOUDFLARE_PAGES_PROJECT
+    $deployHookUrl = Normalize-EnvValue $env:CLOUDFLARE_PAGES_DEPLOY_HOOK_URL
 
     if ([string]::IsNullOrWhiteSpace($token) -or [string]::IsNullOrWhiteSpace($accountId) -or [string]::IsNullOrWhiteSpace($projectName)) {
         Write-Warning "No se actualizara Cloudflare Pages automaticamente. Configure: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_PAGES_PROJECT"
@@ -74,6 +80,9 @@ if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue)) {
 
 Write-Host "[2/3] Levantando backend y servicios..."
 docker compose up -d --build
+if ($LASTEXITCODE -ne 0) {
+    throw "Docker compose fallo. Verifique que Docker Desktop este iniciado y operativo."
+}
 
 Write-Host "[3/3] Iniciando tunnel temporal..."
 Write-Host "Mantenga esta terminal abierta para que el tunnel siga activo."
