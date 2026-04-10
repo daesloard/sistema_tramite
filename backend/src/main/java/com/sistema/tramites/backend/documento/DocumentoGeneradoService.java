@@ -1,11 +1,16 @@
 package com.sistema.tramites.backend.documento;
 
+import com.itextpdf.text.pdf.PdfReader;
+import com.itextpdf.text.pdf.PdfStamper;
+import com.itextpdf.text.pdf.PdfWriter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -71,11 +76,36 @@ public class DocumentoGeneradoService {
             byte[] docxProcesado = docxtemplaterService.processTemplate(templateName, tramite, aprobado, observacion);
             System.out.println("[PDF] DOCX procesado OK (" + docxProcesado.length + " bytes). Convirtiendo a PDF...");
             byte[] pdf = convertirDocxAPdf(docxProcesado);
-            System.out.println("[PDF] PDF generado OK (" + pdf.length + " bytes).");
-            return pdf;
+            byte[] pdfProtegido = protegerPdfContraEdicion(pdf);
+            System.out.println("[PDF] PDF generado y protegido OK (" + pdfProtegido.length + " bytes).");
+            return pdfProtegido;
         } catch (Exception ex) {
             System.err.println("[PDF] ERROR al generar PDF: " + ex.getMessage());
             throw ex;
+        }
+    }
+
+    private byte[] protegerPdfContraEdicion(byte[] pdfBytes) throws Exception {
+        if (pdfBytes == null || pdfBytes.length == 0) {
+            throw new IllegalArgumentException("No se puede proteger un PDF vacío");
+        }
+
+        try (java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+            PdfReader reader = new PdfReader(pdfBytes);
+            String ownerPassword = "owner-" + UUID.randomUUID();
+            PdfStamper stamper = new PdfStamper(reader, out);
+
+            // Permite visualización/impresión, pero bloquea edición/copia/comentarios.
+            stamper.setEncryption(
+                    null,
+                    ownerPassword.getBytes(StandardCharsets.UTF_8),
+                    PdfWriter.ALLOW_PRINTING,
+                    PdfWriter.ENCRYPTION_AES_256
+            );
+
+            stamper.close();
+            reader.close();
+            return out.toByteArray();
         }
     }
 
