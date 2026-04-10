@@ -13,10 +13,11 @@ export const getAvisoModalStyles = () => ({
   },
   panel: {
     width: 'min(92vw, 520px)',
-    padding: '14px 16px',
-    borderRadius: theme.radius.lg,
-    border: '1px solid transparent',
-    boxShadow: theme.shadows.modal,
+    padding: '16px 18px',
+    borderRadius: theme.radius.xl,
+    border: `1px solid ${theme.colors.borderNeutral}`,
+    boxShadow: '0 24px 48px rgba(15,23,42,0.2)',
+    background: 'linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)',
   },
   text: {
     margin: 0,
@@ -31,13 +32,14 @@ export const getAvisoModalStyles = () => ({
   },
   close: {
     border: 'none',
-    background: '#1f2937',
+    background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
     color: theme.colors.white,
-    borderRadius: theme.radius.md,
+    borderRadius: '999px',
     cursor: 'pointer',
     fontSize: '12px',
     fontWeight: 700,
     lineHeight: 1,
-    padding: '8px 10px',
+    padding: '0.62rem 0.95rem',
+    boxShadow: '0 12px 22px rgba(15,23,42,0.18)',
   },
 });
