@@ -8,16 +8,18 @@ export default function VerificadorHeader({
 }) {
     return (
         <div style={styles.header}>
-            <div style={styles.tabContainer}>
-                {filtros.map((f) => (
-                    <button
-                        key={f.id}
-                        style={{ ...styles.tab, ...(filtroActual.id === f.id ? styles.tabActivo : {}) }}
-                        onClick={() => setFiltroActual(f)}
-                    >
-                        {f.titulo}
-                    </button>
-                ))}
+            <div style={styles.seccionHeader}>
+                <div style={styles.filtros}>
+                    {filtros.map((f) => (
+                        <button
+                            key={f.key}
+                            style={{ ...styles.btnFiltro, ...(filtroActual.key === f.key ? styles.btnFiltroActivo : {}) }}
+                            onClick={() => setFiltroActual(f)}
+                        >
+                            {f.titulo}
+                        </button>
+                    ))}
+                </div>
             </div>
             <button
                 style={{ ...styles.btnConsolidado, ...(cargandoConsolidado ? styles.disabled : {}) }}
