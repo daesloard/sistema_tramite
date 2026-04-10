@@ -79,16 +79,22 @@ Write-Host "[3/3] Iniciando tunnel temporal..."
 Write-Host "Mantenga esta terminal abierta para que el tunnel siga activo."
 
 $logPath = Join-Path $PSScriptRoot "cloudflared.log"
+$errorLogPath = Join-Path $PSScriptRoot "cloudflared.err.log"
 if (Test-Path $logPath) {
     Remove-Item $logPath -Force
 }
+if (Test-Path $errorLogPath) {
+    Remove-Item $errorLogPath -Force
+}
 
-$process = Start-Process -FilePath "cloudflared" -ArgumentList @("tunnel", "--url", $BackendUrl) -PassThru -RedirectStandardOutput $logPath -RedirectStandardError $logPath
+$process = Start-Process -FilePath "cloudflared" -ArgumentList @("tunnel", "--url", $BackendUrl) -PassThru -RedirectStandardOutput $logPath -RedirectStandardError $errorLogPath
 
 $tunnelUrl = $null
 for ($i = 0; $i -lt 60; $i++) {
-    if (Test-Path $logPath) {
-        $content = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
+    if ((Test-Path $logPath) -or (Test-Path $errorLogPath)) {
+        $outContent = if (Test-Path $logPath) { Get-Content $logPath -Raw -ErrorAction SilentlyContinue } else { "" }
+        $errContent = if (Test-Path $errorLogPath) { Get-Content $errorLogPath -Raw -ErrorAction SilentlyContinue } else { "" }
+        $content = "$outContent`n$errContent"
         if ($content -match "https://[a-z0-9-]+\.trycloudflare\.com") {
             $tunnelUrl = $Matches[0]
             break
@@ -98,7 +104,7 @@ for ($i = 0; $i -lt 60; $i++) {
 }
 
 if ($null -eq $tunnelUrl) {
-    Write-Warning "No se detecto URL trycloudflare en 60s. Revise cloudflared.log"
+    Write-Warning "No se detecto URL trycloudflare en 60s. Revise cloudflared.log y cloudflared.err.log"
 } else {
     Write-Host "[OK] URL tunnel detectada: $tunnelUrl"
     if ($AutoUpdatePages) {
