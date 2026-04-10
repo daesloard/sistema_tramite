@@ -1,7 +1,8 @@
 const hostActual = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 const esDeployPages = hostActual.endsWith('pages.dev');
+const origenTunnelTemporal = 'https://sofa-exploring-emily-days.trycloudflare.com';
 const origenPorDefecto = esDeployPages
-	? 'https://sistema-tramite.onrender.com'
+	? origenTunnelTemporal
 	: `http://${hostActual}:9090`;
 
 export const API_ORIGIN = (import.meta.env.VITE_API_ORIGIN || origenPorDefecto)
