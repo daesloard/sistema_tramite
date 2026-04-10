@@ -35,6 +35,8 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-tramites_municipales}
     ports:
       - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD:-password}"]
       interval: 10s
@@ -67,3 +69,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+
+volumes:
+  mysql_data:
