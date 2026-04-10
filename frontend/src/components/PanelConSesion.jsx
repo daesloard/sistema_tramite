@@ -30,18 +30,6 @@ export default function PanelConSesion({
               🔔
               {noLeidasUsuario > 0 ? <span style={styles.badgeNotificaciones}>{noLeidasUsuario > 99 ? '99+' : noLeidasUsuario}</span> : null}
             </button>
-            {soportaNotificacionesNavegador ? (
-              <button
-                style={{
-                  ...styles.btnNotificacionesBrowser,
-                  ...(notificacionesNavegadorHabilitadas ? styles.btnNotificacionesBrowserActiva : {}),
-                }}
-                onClick={onToggleNotificacionesNavegador}
-                title={notificacionesNavegadorHabilitadas ? 'Desactivar notificaciones del navegador' : 'Activar notificaciones del navegador'}
-              >
-                {notificacionesNavegadorHabilitadas ? '🟢 Noti SO' : '⚪ Noti SO'}
-              </button>
-            ) : null}
             <button style={styles.btnCambiarUsuario} onClick={onCambiarUsuario}>Cambiar usuario</button>
             <button style={styles.btnLogout} onClick={onCerrarSesion}>Cerrar Sesión</button>
           </div>

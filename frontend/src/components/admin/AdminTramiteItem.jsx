@@ -31,13 +31,30 @@ export default function AdminTramiteItem({
 }) {
     const [regenerandoPdf, setRegenerandoPdf] = useState(false);
     const [mensajePdf, setMensajePdf] = useState('');
+    const [pdfGeneradoLocal, setPdfGeneradoLocal] = useState(false);
     const documentosAdmin = obtenerDocumentos(tramite);
     const faltantesDocumentales = obtenerFaltantesDocumentales(tramite.id, documentosAdmin);
     const certificadoGeneradoDisponible = !!documentStatus?.certificadoGeneradoDisponible;
+    const ocultarBotonGenerar = certificadoGeneradoDisponible || pdfGeneradoLocal;
     const almacenamientoCertificadoGenerado = documentStatus?.certificadoGeneradoAlmacenamiento
         || (tramite?.ruta_certificado_final?.startsWith('drive:') ? 'DRIVE' : 'BD');
     const documentosCompletos = documentosAdmin.length > 0
         && documentosAdmin.every((doc) => !!documentStatus?.[doc.key]?.cargado);
+
+    const manejarGenerarPdf = async () => {
+        setRegenerandoPdf(true);
+        setMensajePdf('');
+        try {
+            const resp = await generarPdf(tramite.id);
+            setPdfGeneradoLocal(true);
+            setMensajePdf(resp?.message || 'PDF generado correctamente');
+        } catch (err) {
+            setPdfGeneradoLocal(false);
+            setMensajePdf(err?.message || 'Error al generar PDF');
+        } finally {
+            setRegenerandoPdf(false);
+        }
+    };
 
     return (
         <Fragment>
@@ -89,14 +106,6 @@ export default function AdminTramiteItem({
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Fecha Vigencia:</span> {formatoFecha(tramite.fechaVigencia)}</p>
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Observaciones:</span> {tramite.observaciones || '-'}</p>
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Certificado generado:</span> {certificadoGeneradoDisponible ? 'Disponible' : 'Pendiente'}</p>
-                                {!certificadoGeneradoDisponible && (
-                                    <button
-                                        style={{ ...styles.btnDocDesc, marginTop: 8 }}
-                                        onClick={() => generarPdf(tramite.id)}
-                                    >
-                                        Generar PDF
-                                    </button>
-                                )}
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Almacenamiento certificado final:</span> {almacenamientoCertificadoGenerado}</p>
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Drive habilitado:</span> {documentStatus?.driveHabilitado ? 'Sí' : 'No'}</p>
                                 <p style={styles.adminDetalleItem}><span style={styles.adminDetalleLabel}>Carpeta Drive trámite:</span> {documentStatus?.driveFolderId || '-'}</p>
@@ -151,22 +160,11 @@ export default function AdminTramiteItem({
                                         <div style={styles.adminDocBtns}>
                                             <button style={styles.btnDocVer} onClick={() => abrirDocumentoGenerado(tramite.id)}>Ver</button>
                                             <button style={styles.btnDocDesc} onClick={() => descargarDocumentoGenerado(tramite.id, tramite.numeroRadicado)}>Descargar</button>
-                                            {!certificadoGeneradoDisponible && (
+                                            {!ocultarBotonGenerar && (
                                                 <button
                                                     style={{ ...styles.btnDocDesc, marginLeft: 8 }}
                                                     disabled={regenerandoPdf}
-                                                    onClick={async () => {
-                                                        setRegenerandoPdf(true);
-                                                        setMensajePdf('');
-                                                        try {
-                                                            const resp = await generarPdf(tramite.id);
-                                                            setMensajePdf(resp.message || 'PDF generado correctamente');
-                                                        } catch (err) {
-                                                            setMensajePdf(err.message || 'Error al generar PDF');
-                                                        } finally {
-                                                            setRegenerandoPdf(false);
-                                                        }
-                                                    }}
+                                                    onClick={manejarGenerarPdf}
                                                 >
                                                     {regenerandoPdf ? 'Generando...' : 'Generar PDF'}
                                                 </button>

@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -20,6 +21,26 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
+            .headers(headers -> headers
+                .contentTypeOptions(contentType -> {})
+                .frameOptions(frameOptions -> frameOptions.deny())
+                .referrerPolicy(referrer -> referrer.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+                .permissionsPolicy(permissions -> permissions.policy("camera=(), microphone=(), geolocation=()"))
+                .httpStrictTransportSecurity(hsts -> hsts
+                    .includeSubDomains(true)
+                    .maxAgeInSeconds(31536000)
+                )
+                .contentSecurityPolicy(csp -> csp.policyDirectives(
+                    "default-src 'self'; "
+                        + "base-uri 'self'; "
+                        + "frame-ancestors 'none'; "
+                        + "form-action 'self'; "
+                        + "img-src 'self' data: blob: https:; "
+                        + "style-src 'self' 'unsafe-inline' https:; "
+                        + "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; "
+                        + "connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://192.168.*:* http://10.*:* http://172.*:*"
+                ))
+            )
             .authorizeHttpRequests(auth -> auth
                 .anyRequest().permitAll()
             );
