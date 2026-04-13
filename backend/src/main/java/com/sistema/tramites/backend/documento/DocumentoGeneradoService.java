@@ -355,7 +355,8 @@ public class DocumentoGeneradoService {
     public void generarYAdjuntarPdf(com.sistema.tramites.backend.tramite.Tramite tramite, boolean aprobado, String observacion) throws Exception {
         byte[] pdf = generarPdfDocumento(tramite, aprobado, observacion);
         tramite.setContenidoPdfGenerado(pdf);
-        tramite.setNombrePdfGenerado("certificado.pdf");
+        String _docNum = tramite.getNumeroDocumento() != null ? tramite.getNumeroDocumento().replaceAll("[^a-zA-Z0-9]", "") : "sin_documento";
+        tramite.setNombrePdfGenerado(aprobado ? "residencia_" + _docNum + ".pdf" : "residencia_negada_" + _docNum + ".pdf");
         tramite.setMotorPdfGenerado(getMotorPdfConfigurado());
         tramite.setHashDocumentoGenerado(com.sistema.tramites.backend.util.HashUtils.sha256Hex(pdf));
     }

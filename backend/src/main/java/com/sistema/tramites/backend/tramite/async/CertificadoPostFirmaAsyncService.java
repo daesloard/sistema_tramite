@@ -148,7 +148,8 @@ public class CertificadoPostFirmaAsyncService {
                                 byte[] docxProcesado = docxtemplaterService.processTemplate(plantilla, tramite, verificacionAprobada, observaciones);
                                 byte[] pdf = documentoGeneradoService.convertirDocxAGotenberg(docxProcesado);
                                 tramite.setContenidoPdfGenerado(pdf);
-                                tramite.setNombrePdfGenerado("certificado.pdf");
+                                String _docNum1 = tramite.getNumeroDocumento() != null ? tramite.getNumeroDocumento().replaceAll("[^a-zA-Z0-9]", "") : "sin_documento";
+                                tramite.setNombrePdfGenerado(verificacionAprobada ? "residencia_" + _docNum1 + ".pdf" : "residencia_negada_" + _docNum1 + ".pdf");
                                 tramite.setMotorPdfGenerado("Gotenberg");
                                 tramite.setHashDocumentoGenerado(com.sistema.tramites.backend.util.HashUtils.sha256Hex(pdf));
                                 contenidoPdf = pdf;
@@ -193,7 +194,8 @@ public class CertificadoPostFirmaAsyncService {
                                 byte[] docxProcesado = docxtemplaterService.processTemplate(plantilla, tramite, verificacionAprobada, observaciones);
                                 byte[] pdf = documentoGeneradoService.convertirDocxAGotenberg(docxProcesado);
                                 tramite.setContenidoPdfGenerado(pdf);
-                                tramite.setNombrePdfGenerado("certificado.pdf");
+                                String _docNum2 = tramite.getNumeroDocumento() != null ? tramite.getNumeroDocumento().replaceAll("[^a-zA-Z0-9]", "") : "sin_documento";
+                                tramite.setNombrePdfGenerado(verificacionAprobada ? "residencia_" + _docNum2 + ".pdf" : "residencia_negada_" + _docNum2 + ".pdf");
                                 tramite.setMotorPdfGenerado("Gotenberg");
                                 tramite.setHashDocumentoGenerado(com.sistema.tramites.backend.util.HashUtils.sha256Hex(pdf));
                                 auditoriaTramiteService.registrarEventoInmediato(
