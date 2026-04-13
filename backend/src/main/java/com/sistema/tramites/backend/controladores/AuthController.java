@@ -8,14 +8,20 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.List;
 import java.util.Optional;
 import com.sistema.tramites.backend.auth.AuthResponseDTO;
+import com.sistema.tramites.backend.auth.ForgotPasswordRequestDTO;
 import com.sistema.tramites.backend.auth.JwtService;
+import com.sistema.tramites.backend.auth.LoginLockoutService;
 import com.sistema.tramites.backend.auth.LoginDTO;
+import com.sistema.tramites.backend.auth.PasswordRecoveryService;
+import com.sistema.tramites.backend.auth.ResetPasswordRequestDTO;
 import com.sistema.tramites.backend.usuario.RolUsuario;
 import com.sistema.tramites.backend.usuario.Usuario;
 import com.sistema.tramites.backend.usuario.UsuarioOperativoUpdateDTO;
@@ -29,16 +35,23 @@ public class AuthController {
 
     private final UsuarioRepository usuarioRepository;
     private final JwtService jwtService;
+    private final LoginLockoutService loginLockoutService;
+    private final PasswordRecoveryService passwordRecoveryService;
     private final BCryptPasswordEncoder passwordEncoder;
 
-    public AuthController(UsuarioRepository usuarioRepository, JwtService jwtService) {
+    public AuthController(UsuarioRepository usuarioRepository,
+                          JwtService jwtService,
+                          LoginLockoutService loginLockoutService,
+                          PasswordRecoveryService passwordRecoveryService) {
         this.usuarioRepository = usuarioRepository;
         this.jwtService = jwtService;
+        this.loginLockoutService = loginLockoutService;
+        this.passwordRecoveryService = passwordRecoveryService;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginDTO loginDTO) {
+    public ResponseEntity<?> login(@RequestBody LoginDTO loginDTO, HttpServletRequest request) {
         try {
             if (loginDTO == null || loginDTO.getUsername() == null || loginDTO.getPassword() == null
                     || loginDTO.getUsername().isBlank() || loginDTO.getPassword().isBlank()) {
@@ -47,11 +60,20 @@ public class AuthController {
             }
 
             String username = loginDTO.getUsername().trim();
+            String clientIp = resolveClientIp(request);
+
+            LoginLockoutService.LockoutStatus lockoutStatus = loginLockoutService.currentStatus(username, clientIp);
+            if (lockoutStatus.blocked()) {
+                return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                        .header("Retry-After", String.valueOf(lockoutStatus.retryAfterSeconds()))
+                        .body("❌ Demasiados intentos fallidos. Intenta de nuevo en " + lockoutStatus.retryAfterSeconds() + " segundos");
+            }
 
             // Buscar usuario por username
             Optional<Usuario> usuarioOpt = usuarioRepository.findByUsername(username);
             
             if (usuarioOpt.isEmpty()) {
+                loginLockoutService.registerFailure(username, clientIp);
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body("❌ Usuario o contraseña incorrectos");
             }
@@ -60,11 +82,13 @@ public class AuthController {
 
             // Verificar que el usuario esté activo
             if (!Boolean.TRUE.equals(usuario.getActivo())) {
+                loginLockoutService.registerFailure(username, clientIp);
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body("❌ Usuario desactivado");
             }
 
             if (usuario.getRol() == null) {
+                loginLockoutService.registerFailure(username, clientIp);
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body("❌ Usuario sin rol asignado");
             }
@@ -75,6 +99,7 @@ public class AuthController {
             if (!passwordValida) {
                 String hash = usuario.getPasswordHash();
                 if (hash == null || hash.isBlank()) {
+                    loginLockoutService.registerFailure(username, clientIp);
                     return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                             .body("❌ Usuario o contraseña incorrectos");
                 }
@@ -87,9 +112,12 @@ public class AuthController {
             }
 
             if (!passwordValida) {
+                loginLockoutService.registerFailure(username, clientIp);
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body("❌ Usuario o contraseña incorrectos");
             }
+
+            loginLockoutService.registerSuccess(username, clientIp);
 
             // Generar token JWT
             String token = jwtService.generarToken(usuario);
@@ -113,6 +141,86 @@ public class AuthController {
             log.error("Error en login para usuario [{}]: {}", loginDTO != null ? loginDTO.getUsername() : "null", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("❌ Error interno durante autenticación");
+        }
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String cfConnectingIp = cleanIp(request.getHeader("CF-Connecting-IP"));
+        if (cfConnectingIp != null) {
+            return cfConnectingIp;
+        }
+
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+            String first = xForwardedFor.split(",")[0];
+            String clean = cleanIp(first);
+            if (clean != null) {
+                return clean;
+            }
+        }
+
+        String xRealIp = cleanIp(request.getHeader("X-Real-IP"));
+        if (xRealIp != null) {
+            return xRealIp;
+        }
+
+        String remoteAddr = cleanIp(request.getRemoteAddr());
+        return remoteAddr != null ? remoteAddr : "unknown";
+    }
+
+    private String cleanIp(String value) {
+        if (value == null) {
+            return null;
+        }
+        String clean = value.trim();
+        return clean.isEmpty() ? null : clean;
+    }
+
+    @PostMapping("/password/forgot")
+    public ResponseEntity<?> solicitarRecuperacionContrasena(@RequestBody(required = false) ForgotPasswordRequestDTO request,
+                                                              HttpServletRequest httpRequest) {
+        String identificador = request != null ? request.getUsuarioOEmail() : null;
+        String clientIp = resolveClientIp(httpRequest);
+
+        try {
+            passwordRecoveryService.solicitarRecuperacion(identificador, clientIp);
+        } catch (Exception ex) {
+            log.warn("Error en solicitud de recuperación para [{}]: {}", identificador, ex.getMessage());
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "status", "ok",
+                "message", "Si existe una cuenta asociada, recibirás instrucciones en tu correo"
+        ));
+    }
+
+    @PostMapping("/password/reset")
+    public ResponseEntity<?> restablecerContrasena(@RequestBody ResetPasswordRequestDTO request) {
+        if (request == null || request.getToken() == null || request.getNuevaContrasena() == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("❌ Datos incompletos");
+        }
+
+        String nueva = request.getNuevaContrasena() == null ? "" : request.getNuevaContrasena().trim();
+        String confirmar = request.getConfirmarContrasena() == null ? "" : request.getConfirmarContrasena().trim();
+        if (!confirmar.isBlank() && !nueva.equals(confirmar)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("❌ La confirmación de contraseña no coincide");
+        }
+
+        try {
+            passwordRecoveryService.restablecerContrasena(request.getToken(), nueva);
+            return ResponseEntity.ok(Map.of(
+                    "status", "ok",
+                    "message", "Contraseña actualizada correctamente"
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("❌ " + e.getMessage());
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("❌ " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Error al restablecer contraseña", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Error interno al restablecer contraseña");
         }
     }
 

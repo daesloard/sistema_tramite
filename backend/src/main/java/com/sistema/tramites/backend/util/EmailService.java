@@ -400,5 +400,36 @@ public class EmailService {
     private boolean tieneContenido(byte[] contenido) {
         return contenido != null && contenido.length > 0;
     }
+
+    @Async("mailTaskExecutor")
+    public void enviarTokenRecuperacionContrasena(String correoDestino, String nombre, String token, java.time.LocalDateTime expiraEn) {
+        try {
+            String destino = normalizarCorreo(correoDestino);
+            if (destino.isBlank()) {
+                logger.warn("⚠️ Se omitió recuperación de contraseña: correo destino vacío");
+                return;
+            }
+
+            SimpleMailMessage mensaje = new SimpleMailMessage();
+            mensaje.setTo(destino);
+            mensaje.setFrom(Objects.requireNonNull(obtenerRemitente()));
+            mensaje.setSubject("Recuperación de contraseña - Ventanilla Virtual");
+
+            String nombreVisible = (nombre == null || nombre.isBlank()) ? "usuario" : nombre;
+            String expiraTexto = expiraEn == null ? "próximos minutos" : expiraEn.format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+            String contenido = "Hola " + nombreVisible + ",\n\n"
+                    + "Recibimos una solicitud para restablecer tu contraseña.\n"
+                    + "Usa este token para continuar con el cambio:\n\n"
+                    + token + "\n\n"
+                    + "Este token expira: " + expiraTexto + "\n"
+                    + "Si no solicitaste este cambio, puedes ignorar este correo.\n\n"
+                    + "Ventanilla Virtual";
+
+            mensaje.setText(contenido);
+            enviarConReintento(() -> mailSender.send(mensaje), "recuperación contraseña", destino, "N/A");
+        } catch (Exception e) {
+            logger.error("❌ Error enviando token de recuperación: {}", e.getMessage(), e);
+        }
+    }
 }
 
