@@ -14,6 +14,8 @@ import { useNotificaciones, soportaNotificacionesNavegador } from './hooks/useNo
 const PanelVerificador = lazy(() => import('./components/PanelVerificador'));
 const PanelAlcalde = lazy(() => import('./components/PanelAlcalde'));
 const PanelAdmin = lazy(() => import('./components/PanelAdmin'));
+const ForgotPassword = lazy(() => import('./components/ForgotPassword'));
+const ResetPassword = lazy(() => import('./components/ResetPassword'));
 
 const RUTA_POR_VISTA = {
   inicio: '/',
@@ -205,6 +207,24 @@ export default function App() {
         element={usuarioActual
           ? <Navigate to={rutaPanelPorRol(usuarioActual.rol) || '/'} replace />
           : <VistaLogin onVolver={() => navigate('/')} onLoginSuccess={handleLoginUnificado} />}
+      />
+
+      <Route
+        path="/forgot-password"
+        element={(
+          <Suspense fallback={<CargandoModulo texto="Cargando..." />}>
+            <ForgotPassword />
+          </Suspense>
+        )}
+      />
+
+      <Route
+        path="/reset-password"
+        element={(
+          <Suspense fallback={<CargandoModulo texto="Cargando..." />}>
+            <ResetPassword />
+          </Suspense>
+        )}
       />
 
       <Route

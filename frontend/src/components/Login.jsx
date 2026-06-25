@@ -151,6 +151,9 @@ export default function Login({ onLoginSuccess, rol }) {
 
         <div style={styles.loginFooter}>
           <p style={styles.footerText}>🔒 Acceso seguro con autenticación JWT</p>
+          <div style={{ marginTop: 8 }}>
+            <a href="/forgot-password" style={{ color: '#0b66ff', textDecoration: 'none' }}>¿Olvidaste tu contraseña?</a>
+          </div>
         </div>
       </div>
     </div>

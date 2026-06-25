@@ -18,11 +18,20 @@ import java.util.Base64;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
 
 @Service
 public class PasswordRecoveryService {
 
     private static final Logger log = LoggerFactory.getLogger(PasswordRecoveryService.class);
+
+    /**
+     * Política: mínimo 8 caracteres, al menos una mayúscula, una minúscula,
+     * un dígito y un carácter especial (no alfanumérico).
+     */
+    private static final Pattern POLITICA_PASSWORD = Pattern.compile(
+            "^(?=.*[A-Z])(?=.*[a-z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,}$"
+    );
 
     private final UsuarioRepository usuarioRepository;
     private final EmailService emailService;
@@ -118,7 +127,9 @@ public class PasswordRecoveryService {
         }
 
         if (!cumplePoliticaContrasena(password)) {
-            throw new IllegalArgumentException("La contraseña debe tener al menos 8 caracteres, una letra y un número");
+            throw new IllegalArgumentException(
+                    "La contraseña debe tener al menos 8 caracteres, una mayúscula, " +
+                    "una minúscula, un número y un carácter especial");
         }
 
         long nowMillis = System.currentTimeMillis();
@@ -170,26 +181,10 @@ public class PasswordRecoveryService {
     }
 
     private boolean cumplePoliticaContrasena(String password) {
-        if (password == null || password.length() < 8) {
+        if (password == null) {
             return false;
         }
-
-        boolean hasLetter = false;
-        boolean hasDigit = false;
-
-        for (char c : password.toCharArray()) {
-            if (Character.isLetter(c)) {
-                hasLetter = true;
-            }
-            if (Character.isDigit(c)) {
-                hasDigit = true;
-            }
-            if (hasLetter && hasDigit) {
-                return true;
-            }
-        }
-
-        return false;
+        return POLITICA_PASSWORD.matcher(password).matches();
     }
 
     private String generarToken() {
